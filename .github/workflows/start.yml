@@ -1,368 +1,131 @@
-name: 🎮 Minecraft Server (serveo.net)
+name: Minecraft Paper Server
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      server_file:
-        description: 'Имя файла сервера'
-        required: true
-        default: 'server.jar'
-        type: string
-      java_version:
-        description: 'Версия Java'
-        required: true
-        default: '17'
-        type: choice
-        options:
-          - '8'
-          - '11'
-          - '17'
-          - '21'
-      ram:
-        description: 'Оперативная память (GB)'
-        required: true
-        default: '4'
-        type: choice
-        options:
-          - '2'
-          - '4'
-          - '6'
-          - '8'
-          - '10'
-      server_type:
-        description: 'Тип сервера'
-        required: true
-        default: 'vanilla'
-        type: choice
-        options:
-          - 'vanilla'
-          - 'paper'
-          - 'spigot'
-          - 'forge'
-          - 'fabric'
 
 jobs:
-  minecraft-server:
+  build-and-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     
     steps:
-    - name: 📥 Checkout
-      uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
     
-    - name: ☕ Setup Java
+    - name: Set up Java 17
       uses: actions/setup-java@v3
       with:
         distribution: 'temurin'
-        java-version: ${{ github.event.inputs.java_version }}
+        java-version: '17'
     
-    - name: 🔍 Server Detection
-      id: server
+    - name: Download Paper 1.19.2
       run: |
-        cd server
-        
-        # Ищем сервер
-        SERVER_FILE="${{ github.event.inputs.server_file }}"
-        
-        if [ -f "$SERVER_FILE" ]; then
-          echo "✅ Найден: $SERVER_FILE"
-          echo "file=$SERVER_FILE" >> $GITHUB_OUTPUT
-        else
-          JAR=$(ls *.jar 2>/dev/null | head -n 1)
-          if [ -n "$JAR" ]; then
-            echo "✅ Найден: $JAR"
-            echo "file=$JAR" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Сервер не найден!"
-            exit 1
-          fi
-        fi
-        
-        # EULA
-        if [ ! -f "eula.txt" ]; then
-          echo "eula=true" > eula.txt
-        else
-          sed -i 's/eula=false/eula=true/g' eula.txt
-        fi
-        
-        chmod +x *.jar 2>/dev/null || true
+        wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/latest/downloads/paper-1.19.2-latest.jar
     
-    - name: ⚙️ Server Optimization
+    - name: Create server.properties
       run: |
-        cd server
-        
-        # Оптимизированные настройки для сильного железа
         cat > server.properties << EOF
-# Основные настройки
-server-port=25565
-online-mode=false
-max-players=50
-motd=§6§l✦ §bMinecraft §aServer §6§l✦\n§7Свободный доступ на 6 часов
-gamemode=survival
-difficulty=normal
-spawn-protection=16
-enable-command-block=true
-
-# Производительность
-view-distance=10
-simulation-distance=8
-max-tick-time=60000
-entity-broadcast-range-percentage=100
-network-compression-threshold=256
-
-# Мир
-level-name=world
-level-seed=
-generate-structures=true
-allow-nether=true
-allow-end=true
-
-# Настройки игроков
-allow-flight=false
-enforce-whitelist=false
-enable-query=true
-query.port=25565
-
-# Оптимизация
-max-players=50
-max-world-size=29999984
-EOF
-        
-        # Если есть моды/плагины
-        if [ -d "mods" ] && [ "$(ls -A mods 2>/dev/null)" ]; then
-          echo "✅ Моды: $(ls mods | wc -l) шт."
-        fi
-        
-        if [ -d "plugins" ] && [ "$(ls -A plugins 2>/dev/null)" ]; then
-          echo "✅ Плагины: $(ls plugins | wc -l) шт."
-        fi
-        
-        # Создаем стартовый скрипт
-        cat > start.sh << 'EOF'
-#!/bin/bash
-SERVER_FILE="$1"
-RAM="$2"
-JAVA_OPTS="-Xmx${RAM} -Xms${RAM} -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
-
-echo "🚀 Запуск сервера с RAM: $RAM"
-echo "☕ Java опции: $JAVA_OPTS"
-
-java $JAVA_OPTS -jar "$SERVER_FILE" nogui
-EOF
-        
-        chmod +x start.sh
+        # Minecraft server properties
+        enable-jmx-monitoring=false
+        rcon.port=25575
+        level-seed=
+        gamemode=survival
+        enable-command-block=false
+        enable-query=false
+        generator-settings={}
+        enforce-secure-profile=true
+        level-name=world
+        motd=GitHub Actions Minecraft Server
+        query.port=25565
+        pvp=true
+        generate-structures=true
+        max-chained-neighbor-updates=1000000
+        difficulty=easy
+        network-compression-threshold=256
+        max-tick-time=60000
+        require-resource-pack=false
+        use-native-transport=true
+        max-players=20
+        online-mode=false
+        enable-status=true
+        allow-flight=false
+        initial-disabled-packs=
+        broadcast-rcon-to-ops=true
+        view-distance=10
+        server-ip=0.0.0.0
+        resource-pack-prompt=
+        allow-nether=true
+        server-port=25565
+        sync-chunk-writes=true
+        enable-rcon=false
+        op-permission-level=4
+        prevent-proxy-connections=false
+        hide-online-players=false
+        resource-pack=
+        entity-broadcast-range-percentage=100
+        simulation-distance=10
+        rcon.password=
+        player-idle-timeout=0
+        debug=false
+        force-gamemode=false
+        rate-limit=0
+        hardcore=false
+        white-list=false
+        broadcast-console-to-ops=true
+        spawn-npcs=true
+        spawn-animals=true
+        function-permission-level=2
+        spawn-monsters=true
+        enforce-whitelist=false
+        spawn-protection=16
+        resource-pack-sha1=
+        max-world-size=29999984
+        EOF
     
-    - name: 🐍 Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+    - name: Create eula.txt
+      run: echo "eula=true" > eula.txt
     
-    - name: 📦 Install Dependencies
+    - name: Start Minecraft server in background
       run: |
-        pip install -r bot/requirements.txt
-        pip install mcstatus
+        nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui &
+        sleep 30
+    
+    - name: Install SSH client
+      run: |
         sudo apt-get update
-        sudo apt-get install -y sshpass
+        sudo apt-get install -y openssh-client autossh
     
-    - name: 🆔 Generate Access Code
-      id: code
+    - name: Create tunnel through Serveo
       run: |
-        CODE=$(cat /dev/urandom | tr -dc 'A-Z0-9' | fold -w 8 | head -n 1)
-        echo "code=$CODE" >> $GITHUB_OUTPUT
-        echo "✅ Код: $CODE"
-    
-    - name: 🌐 Setup serveo.net Tunnel
-      id: serveo
-      run: |
-        # Генерируем уникальный поддомен
-        SUBDOMAIN="mc$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 6 | head -n 1)"
-        echo "🌐 Поддомен: $SUBDOMAIN.serveo.net"
+        # Создаем туннель с фиксированным поддоменом
+        ssh -o StrictHostKeyChecking=no -R SilentSMP.serveo.net:80:localhost:25565 serveo.net &
         
-        # Запускаем serveo туннель
-        ssh -R $SUBDOMAIN:25565:localhost:25565 serveo.net &
-        TUNNEL_PID=$!
-        echo "tunnel_pid=$TUNNEL_PID" >> $GITHUB_OUTPUT
-        echo "subdomain=$SUBDOMAIN" >> $GITHUB_OUTPUT
+        # Альтернативный вариант с автоматическим выбором порта
+        # ssh -o StrictHostKeyChecking=no -R 80:localhost:25565 serveo.net &
         
-        # Ждем подключения
         sleep 10
         
-        # Проверяем
-        if curl -s "http://$SUBDOMAIN.serveo.net" > /dev/null; then
-          echo "✅ Туннель активен"
-          IP="$SUBDOMAIN.serveo.net"
-        else
-          echo "⚠️ Используем прямой IP"
-          IP=$(curl -s ifconfig.me)
-        fi
-        
-        echo "ip=$IP" >> $GITHUB_OUTPUT
-        echo "🌐 Адрес: $IP"
-        
-        # Сохраняем для бота
-        echo "$IP" > /tmp/server_ip.txt
+        # Показываем URL для подключения
+        echo "=================================================="
+        echo "✅ Сервер доступен по адресу: SilentSMP.serveo.net"
+        echo "📌 Порт: 25565 (стандартный порт Minecraft)"
+        echo "=================================================="
     
-    - name: 🤖 Register with Bot
-      env:
-        BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
+    - name: Get tunnel info
       run: |
-        python bot/bot.py \
-          --add-code "${{ steps.code.outputs.code }}" \
-          --ip "${{ steps.serveo.outputs.ip }}" \
-          --port "25565" \
-          --java "${{ github.event.inputs.java_version }}" \
-          --ram "${{ github.event.inputs.ram }}G" \
-          --subdomain "${{ steps.serveo.outputs.subdomain }}"
+        echo "📍 Проверка статуса туннеля..."
+        curl -s http://serveo.net/status || echo "Не удалось проверить статус"
     
-    - name: 🚀 Start Minecraft Server
-      id: start
+    - name: Keep server running
       run: |
-        cd server
-        RAM="${{ github.event.inputs.ram }}G"
-        FILE="${{ steps.server.outputs.file }}"
-        
-        # Запускаем с оптимизациями
-        nohup ./start.sh "$FILE" "$RAM" > server.log 2>&1 &
-        SERVER_PID=$!
-        echo "server_pid=$SERVER_PID" >> $GITHUB_OUTPUT
-        
-        # Ждем запуска
-        echo "⏳ Запуск сервера..."
-        for i in {1..60}; do
-          if nc -z localhost 25565 2>/dev/null; then
-            echo "✅ Сервер запущен!"
-            break
-          fi
-          echo -n "."
-          sleep 2
-        done
+        echo "=================================================="
+        echo "🟢 Minecraft сервер запущен!"
+        echo "🌐 Подключайтесь по адресу: SilentSMP.serveo.net"
+        echo "=================================================="
         echo ""
-        
-        # Показываем логи
-        echo "📋 Логи сервера:"
-        tail -20 server.log || true
-    
-    - name: 🤖 Start Telegram Bot
-      run: |
-        nohup python bot/bot.py &
-        echo "✅ Бот запущен"
-    
-    - name: 📊 Server Info
-      run: |
+        echo "⚠️  ВАЖНО: Для подключения используйте прямой IP:"
+        echo "   или используйте сторонний сервис для DNS"
         echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "🎮 MINECRAFT СЕРВЕР ЗАПУЩЕН!"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo ""
-        echo "📌 КОД ДОСТУПА: ${{ steps.code.outputs.code }}"
-        echo "🌐 АДРЕС: ${{ steps.serveo.outputs.ip }}"
-        echo "🔌 ПОРТ: 25565"
-        echo "☕ JAVA: ${{ github.event.inputs.java_version }}"
-        echo "💾 RAM: ${{ github.event.inputs.ram }}G"
-        echo "🖥️ CPU: AMD EPYC 7763 (4 ядра)"
-        echo "⏰ ВРЕМЯ: 6 часов"
-        echo ""
-        echo "📝 ИНСТРУКЦИЯ:"
-        echo "1️⃣ Отправьте код боту: ${{ secrets.BOT_USERNAME }}"
-        echo "2️⃣ Получите IP адрес"
-        echo "3️⃣ Подключитесь в Minecraft"
-        echo "4️⃣ Играйте!"
-        echo ""
-        echo "📊 МОНИТОРИНГ:"
-        echo "• Игроки: /list"
-        echo "• Статус: /status"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    - name: 📊 System Monitoring
-      run: |
-        echo "📊 СИСТЕМНАЯ ИНФОРМАЦИЯ:"
-        echo ""
-        echo "💻 CPU:"
-        lscpu | grep "Model name"
-        echo "Ядер: $(nproc)"
-        echo "Загрузка: $(uptime | awk -F'load average:' '{print $2}')"
-        echo ""
-        echo "🧠 Память:"
-        free -h
-        echo ""
-        echo "💾 Диск:"
-        df -h /
-        echo ""
-        echo "🌐 Сеть:"
-        ip addr show | grep inet
-    
-    - name: ⏰ Keep Alive & Monitor
-      run: |
-        # Мониторинг каждую минуту
-        while true; do
-          echo "⏰ $(date '+%H:%M:%S') - Сервер работает"
-          
-          # Проверка сервера
-          if ! nc -z localhost 25565 2>/dev/null; then
-            echo "⚠️ Сервер упал! Перезапуск..."
-            cd server
-            RAM="${{ github.event.inputs.ram }}G"
-            FILE="${{ steps.server.outputs.file }}"
-            nohup ./start.sh "$FILE" "$RAM" > server.log 2>&1 &
-            cd ..
-          fi
-          
-          # Статистика каждые 5 минут
-          if [ $((SECONDS % 300)) -eq 0 ]; then
-            echo "📊 Статистика:"
-            echo "  RAM: $(free -h | grep Mem | awk '{print $3 "/" $2}')"
-            echo "  CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}')%"
-            echo "  Игроки: $(echo "list" | nc localhost 25565 2>/dev/null | wc -l || echo 0)"
-          fi
-          
-          sleep 60
-        done &
-        
-        # Ждем 6 часов
-        echo "⏳ Сервер работает 6 часов"
-        echo "🕐 Остановка: $(date -d '+6 hours' '+%H:%M:%S')"
-        sleep 21000
-        
-        echo "🛑 Время вышло!"
-    
-    - name: 💾 Save World
-      if: always()
-      run: |
-        cd server
-        
-        # Сохраняем мир
-        echo "save-all" | nc localhost 25565 2>/dev/null || true
-        sleep 5
-        
-        if [ -d "world" ]; then
-          # Сжимаем для экономии
-          tar -czf world_backup_$(date +%Y%m%d_%H%M%S).tar.gz world/
-          
-          git config user.name "Minecraft Server"
-          git config user.email "server@minecraft.com"
-          git add world/ world_backup_*.tar.gz
-          git commit -m "💾 Сохранение мира $(date '+%Y-%m-%d %H:%M')" || true
-          git push origin main || true
-          
-          echo "✅ Мир сохранен!"
-          ls -lh world_backup_*.tar.gz
-        fi
-    
-    - name: 🛑 Stop Server
-      if: always()
-      run: |
-        cd server
-        
-        # Останавливаем
-        echo "stop" | nc localhost 25565 2>/dev/null || true
-        sleep 5
-        
-        # Убиваем процесс
-        pkill -f "java.*server" || true
-        
-        echo "✅ Сервер остановлен"
-        
-        # Закрываем туннель
-        pkill -f "ssh.*serveo" || true
-        echo "✅ Туннель закрыт"
+        echo "📝 Логи сервера:"
+        tail -f nohup.out
