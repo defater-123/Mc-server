@@ -21,40 +21,19 @@ jobs:
     
     - name: Download Paper 1.19.2
       run: |
-        # Используем API v3
-        echo "Получаем информацию о последней сборке Paper 1.19.2..."
-        BUILD_INFO=$(curl -s https://api.papermc.io/v3/projects/paper/versions/1.19.2/builds/latest)
-        
-        # Извлекаем номер сборки и хэш файла
-        BUILD=$(echo $BUILD_INFO | grep -o '"build":"[0-9]*"' | grep -o '[0-9]*')
-        DOWNLOAD_HASH=$(echo $BUILD_INFO | grep -o '"downloads":{"application":{"name":"[^"]*","sha256":"[^"]*"' | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
-        
-        if [ -z "$BUILD" ]; then
-          echo "Не удалось получить номер сборки через API v3, используем фиксированную сборку 312"
-          BUILD=312
-          DOWNLOAD_HASH="paper-1.19.2-312.jar"
-        else
-          DOWNLOAD_HASH="paper-1.19.2-${BUILD}.jar"
-        fi
-        
-        echo "Последняя сборка: $BUILD"
-        echo "Имя файла: $DOWNLOAD_HASH"
-        
-        # Скачиваем через API v3
-        wget -O paper.jar https://api.papermc.io/v3/projects/paper/versions/1.19.2/builds/$BUILD/downloads/$DOWNLOAD_HASH
-        
-        # Если не получилось через API v3, пробуем зеркало
-        if [ ! -f paper.jar ] || [ ! -s paper.jar ]; then
-          echo "Пробуем скачать через зеркало..."
-          wget -O paper.jar https://download.papermc.io/paper/v1.19.2/paper-1.19.2-${BUILD}.jar
-        fi
+        # Используем прямую ссылку на файл через новый API
+        echo "Скачиваем Paper 1.19.2 (сборка 307)..."
+        wget -O paper.jar https://fill-data.papermc.io/v1/objects/2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864/paper-1.19.2-307.jar
         
         # Проверяем, что файл скачался
         if [ -f paper.jar ] && [ -s paper.jar ]; then
           echo "✅ Файл успешно скачан:"
           ls -lh paper.jar
+          # Проверяем SHA-256 (опционально)
+          echo "Проверка SHA-256:"
+          sha256sum paper.jar
         else
-          echo "❌ Не удалось скачать Paper. Останавливаем процесс."
+          echo "❌ Ошибка скачивания файла"
           exit 1
         fi
     
