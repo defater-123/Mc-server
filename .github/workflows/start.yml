@@ -21,15 +21,33 @@ jobs:
     
     - name: Download Paper 1.19.2
       run: |
-        # Получаем номер последней сборки для версии 1.19.2
-        BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds | jq -r '.builds[-1].build')
+        # Получаем список сборок и извлекаем номер последней через grep/sed
+        BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds | grep -o '"build":[0-9]*' | tail -1 | grep -o '[0-9]*')
+        
+        if [ -z "$BUILD" ]; then
+          echo "Не удалось получить номер сборки, пробуем запасной метод..."
+          # Запасной метод: парсим через sed
+          BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds | sed -n 's/.*"build":\([0-9]*\).*/\1/p' | tail -1)
+        fi
+        
         echo "Последняя сборка: $BUILD"
+        
+        if [ -z "$BUILD" ] || [ "$BUILD" = "null" ]; then
+          echo "Ошибка: не удалось определить номер сборки. Используем фиксированную версию 312"
+          BUILD=312
+        fi
         
         # Скачиваем jar-файл
         wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/$BUILD/downloads/paper-1.19.2-$BUILD.jar
         
         # Проверяем, что файл скачался
-        ls -lh paper.jar
+        if [ -f paper.jar ] && [ -s paper.jar ]; then
+          echo "✅ Файл успешно скачан:"
+          ls -lh paper.jar
+        else
+          echo "❌ Ошибка скачивания. Пробуем альтернативный URL..."
+          wget -O paper.jar https://papermc.io/api/v2/projects/paper/versions/1.19.2/builds/latest/downloads/paper-1.19.2-latest.jar
+        fi
     
     - name: Create server.properties
       run: |
@@ -97,7 +115,7 @@ jobs:
       run: |
         nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui &
         sleep 30
-        echo "Сервер запущен!"
+        echo "✅ Сервер запущен!"
     
     - name: Setup Serveo tunnel
       run: |
