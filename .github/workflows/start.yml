@@ -21,12 +21,19 @@ jobs:
     
     - name: Download Paper 1.19.2
       run: |
-        wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/latest/downloads/paper-1.19.2-latest.jar
+        # Получаем номер последней сборки для версии 1.19.2
+        BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds | jq -r '.builds[-1].build')
+        echo "Последняя сборка: $BUILD"
+        
+        # Скачиваем jar-файл
+        wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/$BUILD/downloads/paper-1.19.2-$BUILD.jar
+        
+        # Проверяем, что файл скачался
+        ls -lh paper.jar
     
     - name: Create server.properties
       run: |
         cat > server.properties << EOF
-        # Minecraft server properties
         enable-jmx-monitoring=false
         rcon.port=25575
         level-seed=
@@ -86,46 +93,28 @@ jobs:
     - name: Create eula.txt
       run: echo "eula=true" > eula.txt
     
-    - name: Start Minecraft server in background
+    - name: Start Minecraft server
       run: |
         nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui &
         sleep 30
+        echo "Сервер запущен!"
     
-    - name: Install SSH client
+    - name: Setup Serveo tunnel
       run: |
         sudo apt-get update
-        sudo apt-get install -y openssh-client autossh
-    
-    - name: Create tunnel through Serveo
-      run: |
-        # Создаем туннель с фиксированным поддоменом
+        sudo apt-get install -y openssh-client
+        
+        # Создаем туннель через Serveo
         ssh -o StrictHostKeyChecking=no -R SilentSMP.serveo.net:80:localhost:25565 serveo.net &
         
-        # Альтернативный вариант с автоматическим выбором порта
-        # ssh -o StrictHostKeyChecking=no -R 80:localhost:25565 serveo.net &
-        
         sleep 10
-        
-        # Показываем URL для подключения
         echo "=================================================="
         echo "✅ Сервер доступен по адресу: SilentSMP.serveo.net"
-        echo "📌 Порт: 25565 (стандартный порт Minecraft)"
+        echo "📌 Порт: 25565"
         echo "=================================================="
     
-    - name: Get tunnel info
+    - name: Keep alive
       run: |
-        echo "📍 Проверка статуса туннеля..."
-        curl -s http://serveo.net/status || echo "Не удалось проверить статус"
-    
-    - name: Keep server running
-      run: |
-        echo "=================================================="
-        echo "🟢 Minecraft сервер запущен!"
-        echo "🌐 Подключайтесь по адресу: SilentSMP.serveo.net"
-        echo "=================================================="
-        echo ""
-        echo "⚠️  ВАЖНО: Для подключения используйте прямой IP:"
-        echo "   или используйте сторонний сервис для DNS"
-        echo ""
-        echo "📝 Логи сервера:"
+        echo "Сервер запущен и доступен по адресу SilentSMP.serveo.net"
+        echo "Для остановки нажмите Ctrl+C"
         tail -f nohup.out
