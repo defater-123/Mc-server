@@ -200,7 +200,7 @@ jobs:
     
     - name: Upload server files as artifact
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: minecraft-server-files
         path: |
