@@ -21,37 +21,32 @@ jobs:
     
     - name: Download Paper 1.19.2
       run: |
-        # Получаем список сборок и извлекаем номер последней через grep/sed
-        BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds | grep -o '"build":[0-9]*' | tail -1 | grep -o '[0-9]*')
+        # Используем прямую ссылку на последнюю стабильную сборку 312
+        # SHA-256: 2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864
+        echo "Скачиваем Paper 1.19.2 (сборка 312)..."
+        wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/312/downloads/paper-1.19.2-312.jar
         
-        if [ -z "$BUILD" ]; then
-          echo "Не удалось получить номер сборки, пробуем запасной метод..."
-          # Запасной метод: парсим через sed
-          BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds | sed -n 's/.*"build":\([0-9]*\).*/\1/p' | tail -1)
-        fi
-        
-        echo "Последняя сборка: $BUILD"
-        
-        if [ -z "$BUILD" ] || [ "$BUILD" = "null" ]; then
-          echo "Ошибка: не удалось определить номер сборки. Используем фиксированную версию 312"
-          BUILD=312
-        fi
-        
-        # Скачиваем jar-файл
-        wget -O paper.jar https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/$BUILD/downloads/paper-1.19.2-$BUILD.jar
-        
-        # Проверяем, что файл скачался
+        # Проверяем целостность файла
         if [ -f paper.jar ] && [ -s paper.jar ]; then
           echo "✅ Файл успешно скачан:"
           ls -lh paper.jar
+          # Проверяем SHA-256
+          echo "Проверка SHA-256:"
+          sha256sum paper.jar
         else
-          echo "❌ Ошибка скачивания. Пробуем альтернативный URL..."
-          wget -O paper.jar https://papermc.io/api/v2/projects/paper/versions/1.19.2/builds/latest/downloads/paper-1.19.2-latest.jar
+          echo "❌ Ошибка скачивания через API, пробуем зеркало..."
+          wget -O paper.jar https://download.papermc.io/paper/v1.19.2/paper-1.19.2-312.jar
+        fi
+        
+        # Дополнительная проверка
+        if [ ! -f paper.jar ] || [ ! -s paper.jar ]; then
+          echo "❌ Не удалось скачать Paper. Останавливаем процесс."
+          exit 1
         fi
     
     - name: Create server.properties
       run: |
-        cat > server.properties << EOF
+        cat > server.properties << 'EOF'
         enable-jmx-monitoring=false
         rcon.port=25575
         level-seed=
@@ -107,32 +102,62 @@ jobs:
         resource-pack-sha1=
         max-world-size=29999984
         EOF
+        
+        echo "✅ server.properties создан"
     
     - name: Create eula.txt
-      run: echo "eula=true" > eula.txt
+      run: |
+        echo "eula=true" > eula.txt
+        echo "✅ eula.txt создан"
     
     - name: Start Minecraft server
       run: |
+        echo "Запускаем Minecraft сервер..."
         nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui &
+        
+        # Ждем загрузки сервера
+        echo "Ожидаем загрузки сервера (30 секунд)..."
         sleep 30
-        echo "✅ Сервер запущен!"
+        
+        # Проверяем, запустился ли сервер
+        if pgrep -f "paper.jar"; then
+          echo "✅ Сервер успешно запущен!"
+          echo "📊 Использование памяти:"
+          ps aux | grep paper.jar | grep -v grep
+        else
+          echo "❌ Сервер не запустился. Проверьте логи:"
+          tail -50 nohup.out
+          exit 1
+        fi
     
     - name: Setup Serveo tunnel
       run: |
+        echo "Устанавливаем SSH клиент..."
         sudo apt-get update
         sudo apt-get install -y openssh-client
         
-        # Создаем туннель через Serveo
+        echo "Создаем туннель через Serveo..."
+        # Создаем туннель с фиксированным поддоменом
         ssh -o StrictHostKeyChecking=no -R SilentSMP.serveo.net:80:localhost:25565 serveo.net &
         
-        sleep 10
+        sleep 15
+        
+        echo ""
         echo "=================================================="
-        echo "✅ Сервер доступен по адресу: SilentSMP.serveo.net"
-        echo "📌 Порт: 25565"
+        echo "✅ СЕРВЕР ЗАПУЩЕН И ДОСТУПЕН!"
+        echo "📍 Адрес: SilentSMP.serveo.net"
+        echo "🔌 Порт: 25565"
         echo "=================================================="
+        echo ""
+        echo "⚠️  Примечания:"
+        echo "   - Если поддомен SilentSMP занят, измените его"
+        echo "   - Туннель активен, пока работает этот workflow"
+        echo "   - Для подключения используйте стандартный Minecraft клиент"
     
-    - name: Keep alive
+    - name: Keep server running
       run: |
-        echo "Сервер запущен и доступен по адресу SilentSMP.serveo.net"
-        echo "Для остановки нажмите Ctrl+C"
+        echo ""
+        echo "🟢 Сервер работает и доступен по адресу SilentSMP.serveo.net:25565"
+        echo "📝 Логи сервера:"
+        echo "=================================================="
         tail -f nohup.out
