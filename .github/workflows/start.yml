@@ -19,14 +19,19 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
     
+    - name: Create server directory
+      run: |
+        mkdir -p server
+        echo "✅ Папка server создана"
+    
     - name: Download Paper 1.19.2
       run: |
         echo "Скачиваем Paper 1.19.2 (сборка 307)..."
-        wget -O paper.jar https://fill-data.papermc.io/v1/objects/2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864/paper-1.19.2-307.jar
+        wget -O server/paper.jar https://fill-data.papermc.io/v1/objects/2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864/paper-1.19.2-307.jar
         
-        if [ -f paper.jar ] && [ -s paper.jar ]; then
+        if [ -f server/paper.jar ] && [ -s server/paper.jar ]; then
           echo "✅ Файл успешно скачан:"
-          ls -lh paper.jar
+          ls -lh server/paper.jar
         else
           echo "❌ Ошибка скачивания файла"
           exit 1
@@ -34,7 +39,7 @@ jobs:
     
     - name: Create server.properties
       run: |
-        cat > server.properties << 'EOF'
+        cat > server/server.properties << 'EOF'
         enable-jmx-monitoring=false
         rcon.port=25575
         level-seed=
@@ -90,22 +95,33 @@ jobs:
         resource-pack-sha1=
         max-world-size=29999984
         EOF
-        echo "✅ server.properties создан"
+        echo "✅ server.properties создан в папке server"
     
     - name: Create eula.txt
       run: |
-        echo "eula=true" > eula.txt
-        echo "✅ eula.txt создан"
+        echo "eula=true" > server/eula.txt
+        echo "✅ eula.txt создан в папке server"
+    
+    - name: Check for existing world
+      run: |
+        if [ -d "server/world" ]; then
+          echo "✅ Найден существующий мир, он будет использован"
+          ls -la server/world/
+        else
+          echo "ℹ️ Существующий мир не найден, будет создан новый"
+        fi
     
     - name: Start Minecraft server
       run: |
-        echo "Запускаем Minecraft сервер..."
+        echo "Запускаем Minecraft сервер из папки server..."
+        cd server
         
         # Запускаем сервер и перенаправляем вывод в файл
         java -Xmx1024M -Xms1024M -jar paper.jar nogui > server.log 2>&1 &
         SERVER_PID=$!
         
         echo "PID сервера: $SERVER_PID"
+        echo "Сервер запущен в папке: $(pwd)"
         
         # Ждем загрузки с проверкой каждые 5 секунд
         echo "Ожидаем загрузки сервера..."
@@ -130,6 +146,9 @@ jobs:
           cat server.log
           exit 1
         fi
+        
+        # Возвращаемся в корневую папку
+        cd ..
     
     - name: Setup Serveo tunnel
       run: |
@@ -148,13 +167,53 @@ jobs:
         echo "✅ СЕРВЕР ЗАПУЩЕН И ДОСТУПЕН!"
         echo "📍 Адрес: SilentSMP.serveo.net"
         echo "🔌 Порт: 25565"
+        echo "📂 Папка сервера: server/"
         echo "=================================================="
+    
+    - name: Save server files to repository
+      if: always()
+      run: |
+        echo "Сохраняем файлы сервера в репозиторий..."
+        
+        # Создаем папку для бэкапа, если её нет
+        mkdir -p server_backup
+        
+        # Копируем важные файлы
+        cp -r server/world server_backup/ 2>/dev/null || echo "Папка world не найдена"
+        cp -r server/world_nether server_backup/ 2>/dev/null || echo "Папка world_nether не найдена"
+        cp -r server/world_the_end server_backup/ 2>/dev/null || echo "Папка world_the_end не найдена"
+        cp server/server.properties server_backup/ 2>/dev/null || echo "server.properties не найден"
+        cp server/banned-ips.json server_backup/ 2>/dev/null || echo "banned-ips.json не найден"
+        cp server/banned-players.json server_backup/ 2>/dev/null || echo "banned-players.json не найден"
+        cp server/ops.json server_backup/ 2>/dev/null || echo "ops.json не найден"
+        cp server/whitelist.json server_backup/ 2>/dev/null || echo "whitelist.json не найден"
+        cp server/usercache.json server_backup/ 2>/dev/null || echo "usercache.json не найден"
+        
+        # Создаем архив с миром
+        if [ -d "server/world" ]; then
+          echo "Создаем архив мира..."
+          tar -czf server_backup/world_backup_$(date +%Y%m%d_%H%M%S).tar.gz -C server world world_nether world_the_end 2>/dev/null || echo "Не удалось создать архив"
+        fi
+        
+        echo "✅ Файлы сервера сохранены в server_backup/"
+        ls -la server_backup/
+    
+    - name: Upload server files as artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: minecraft-server-files
+        path: |
+          server/
+          server_backup/
+        retention-days: 7
     
     - name: Keep server running
       run: |
         echo ""
         echo "🟢 Сервер работает и доступен по адресу SilentSMP.serveo.net:25565"
+        echo "📂 Все файлы сервера в папке server/"
         echo "📝 Логи сервера:"
         echo "=================================================="
-        # Показываем логи из server.log, а не nohup.out
-        tail -f server.log
+        # Показываем логи из server.log
+        tail -f server/server.log
