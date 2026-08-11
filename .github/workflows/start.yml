@@ -5,7 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# 🔑 Важно: разрешаем Actions записывать в репозиторий
 permissions:
   contents: write
   actions: write
@@ -18,7 +17,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       with:
-        # Важно для коммитов: используем токен с правами на запись
         token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Set up Java 17
@@ -27,56 +25,63 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
     
-    - name: Check if server exists in repository
+    - name: Check if server exists
       id: check_server
       run: |
         if [ -f "server/paper.jar" ] && [ -f "server/eula.txt" ] && [ -f "server/server.properties" ]; then
-          echo "✅ Найден существующий сервер в репозитории!"
+          echo "✅ Найден существующий сервер!"
           echo "server_exists=true" >> $GITHUB_OUTPUT
-          ls -lh server/paper.jar
         else
-          echo "ℹ️ Сервер не найден в репозитории. Будет создан новый."
+          echo "ℹ️ Сервер не найден, будет создан новый."
           echo "server_exists=false" >> $GITHUB_OUTPUT
         fi
     
     - name: Create server directory
       if: steps.check_server.outputs.server_exists == 'false'
-      run: |
-        mkdir -p server
-        echo "✅ Папка server создана"
+      run: mkdir -p server/plugins
     
     - name: Download Paper 1.19.2
       if: steps.check_server.outputs.server_exists == 'false'
       run: |
-        echo "Скачиваем Paper 1.19.2 (сборка 307)..."
+        echo "Скачиваем Paper 1.19.2..."
         wget -O server/paper.jar https://fill-data.papermc.io/v1/objects/2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864/paper-1.19.2-307.jar
-        
-        if [ -f server/paper.jar ] && [ -s server/paper.jar ]; then
-          echo "✅ Файл успешно скачан:"
-          ls -lh server/paper.jar
-        else
-          echo "❌ Ошибка скачивания файла"
+        if [ ! -f server/paper.jar ] || [ ! -s server/paper.jar ]; then
+          echo "❌ Ошибка скачивания!"
           exit 1
         fi
+        echo "✅ Файл скачан."
+    
+    - name: Download ProximaTunnel
+      if: steps.check_server.outputs.server_exists == 'false'
+      run: |
+        echo "Скачиваем ProximaTunnel плагин..."
+        wget -O server/plugins/ProximaTunnel.jar https://modrinth.com/plugin/proximatunnel/versions/latest/download
+        
+        # Проверяем, что скачался файл
+        if [ ! -f server/plugins/ProximaTunnel.jar ] || [ ! -s server/plugins/ProximaTunnel.jar ]; then
+          echo "⚠️ Не удалось скачать ProximaTunnel, пробуем через прямую ссылку..."
+          # Альтернативная ссылка (нужно будет заменить на актуальную)
+          wget -O server/plugins/ProximaTunnel.jar https://cdn.modrinth.com/data/FzN6w5Cv/versions/1.0.0/ProximaTunnel-1.0.0.jar
+        fi
+        
+        echo "✅ ProximaTunnel установлен!"
     
     - name: Create server.properties
       if: steps.check_server.outputs.server_exists == 'false'
       run: |
         cat > server/server.properties << 'EOF'
+        # Основные настройки
         enable-jmx-monitoring=false
         rcon.port=25575
-        level-seed=
         gamemode=survival
         enable-command-block=false
         enable-query=false
-        generator-settings={}
         enforce-secure-profile=true
         level-name=world
-        motd=GitHub Actions Minecraft Server
+        motd=SilentSMP
         query.port=25565
         pvp=true
         generate-structures=true
-        max-chained-neighbor-updates=1000000
         difficulty=easy
         network-compression-threshold=256
         max-tick-time=60000
@@ -86,69 +91,50 @@ jobs:
         online-mode=false
         enable-status=true
         allow-flight=false
-        initial-disabled-packs=
-        broadcast-rcon-to-ops=true
         view-distance=10
         server-ip=0.0.0.0
-        resource-pack-prompt=
         allow-nether=true
         server-port=25565
         sync-chunk-writes=true
         enable-rcon=false
         op-permission-level=4
-        prevent-proxy-connections=false
-        hide-online-players=false
-        resource-pack=
-        entity-broadcast-range-percentage=100
-        simulation-distance=10
-        rcon.password=
-        player-idle-timeout=0
-        debug=false
-        force-gamemode=false
-        rate-limit=0
-        hardcore=false
-        white-list=false
-        broadcast-console-to-ops=true
-        spawn-npcs=true
-        spawn-animals=true
-        function-permission-level=2
-        spawn-monsters=true
-        enforce-whitelist=false
         spawn-protection=16
-        resource-pack-sha1=
-        max-world-size=29999984
+        white-list=false
         EOF
-        echo "✅ server.properties создан в папке server"
+        echo "✅ server.properties создан. motd=SilentSMP (имя сервера для ProximaTunnel)"
     
     - name: Create eula.txt
       if: steps.check_server.outputs.server_exists == 'false'
       run: |
         echo "eula=true" > server/eula.txt
-        echo "✅ eula.txt создан в папке server"
+        echo "✅ eula.txt создан."
     
-    - name: Check for existing world
+    - name: Create restart script
       run: |
-        if [ -d "server/world" ]; then
-          echo "✅ Найден существующий мир, он будет использован"
-          echo "Размер мира:"
-          du -sh server/world
-        else
-          echo "ℹ️ Существующий мир не найден, будет создан новый"
-        fi
+        cat > server/restart.sh << 'EOF'
+        #!/bin/bash
+        echo "🔄 Сервер перезапускается..."
+        # Ожидаем полной остановки сервера
+        sleep 5
+        # Запускаем новую сессию с сервером
+        cd /home/runner/work/$(basename $(pwd))/$(basename $(pwd))/server
+        nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui >> server.log 2>&1 &
+        echo "✅ Сервер перезапущен!"
+        EOF
+        chmod +x server/restart.sh
+        echo "✅ restart.sh создан."
     
     - name: Start Minecraft server
       run: |
-        echo "Запускаем Minecraft сервер из папки server..."
+        echo "Запускаем Minecraft сервер..."
         cd server
         
-        # Запускаем сервер и перенаправляем вывод в файл
-        java -Xmx1024M -Xms1024M -jar paper.jar nogui > server.log 2>&1 &
+        # Запускаем сервер в фоне
+        nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui >> server.log 2>&1 &
         SERVER_PID=$!
-        
+        echo $SERVER_PID > server.pid
         echo "PID сервера: $SERVER_PID"
-        echo "Сервер запущен в папке: $(pwd)"
         
-        # Ждем загрузки с проверкой каждые 5 секунд
         echo "Ожидаем загрузки сервера..."
         for i in {1..12}; do
           sleep 5
@@ -157,110 +143,91 @@ jobs:
             break
           fi
           if [ $i -eq 12 ]; then
-            echo "❌ Сервер не запустился за 60 секунд. Логи:"
+            echo "❌ Сервер не запустился. Логи:"
             cat server.log
             exit 1
           fi
         done
         
-        # Проверяем, что процесс жив
-        if ps -p $SERVER_PID > /dev/null 2>&1; then
-          echo "✅ Процесс сервера активен (PID: $SERVER_PID)"
-        else
-          echo "❌ Процесс сервера завершился. Логи:"
-          cat server.log
-          exit 1
-        fi
-        
-        # Возвращаемся в корневую папку
         cd ..
     
-    - name: Setup Serveo tunnel
+    - name: Schedule server restart
       run: |
-        echo "Устанавливаем SSH клиент..."
-        sudo apt-get update
-        sudo apt-get install -y openssh-client
+        echo "⏱️ Запускаем таймер перезагрузки (через 5 часов 50 минут)..."
         
-        echo "Создаем туннель через Serveo..."
-        # Создаем туннель с фиксированным поддоменом
-        ssh -o StrictHostKeyChecking=no -R SilentSMP.serveo.net:80:localhost:25565 serveo.net &
+        # Создаем скрипт для отправки сообщений
+        cat > server/send_message.sh << 'EOF'
+        #!/bin/bash
+        MESSAGE="$1"
+        echo "say $MESSAGE" > server/stdin
+        EOF
+        chmod +x server/send_message.sh
         
-        sleep 15
+        # Ожидаем 5 часов 50 минут (21000 секунд)
+        sleep 21000
         
-        echo ""
-        echo "=================================================="
-        echo "✅ СЕРВЕР ЗАПУЩЕН И ДОСТУПЕН!"
-        echo "📍 Адрес: SilentSMP.serveo.net"
-        echo "🔌 Порт: 25565"
-        echo "📂 Папка сервера: server/"
-        echo "=================================================="
+        echo "⚠️ Сервер будет перезагружен через 5 минут!"
+        echo "say Сервер будет перезагружен через 5 минут!" > server/stdin
+        sleep 240  # 4 минуты
+        
+        echo "⚠️ Сервер будет перезагружен через 1 минуту!"
+        echo "say Сервер будет перезагружен через 1 минуту!" > server/stdin
+        sleep 50   # 50 секунд
+        
+        echo "⚠️ Сервер будет перезагружен через 10 секунд!"
+        echo "say Сервер будет перезагружен через 10 секунд!" > server/stdin
+        sleep 10   # 10 секунд
+        
+        echo "💾 Сохраняем мир и выключаем сервер..."
+        echo "save-all" > server/stdin
+        sleep 3
+        echo "stop" > server/stdin
+        
+        # Ожидаем остановки сервера
+        sleep 10
+        
+        echo "🔄 Запускаем скрипт перезапуска..."
+        cd server
+        ./restart.sh
+        cd ..
+        
+        echo "✅ Сервер перезапущен! Ожидаем загрузки..."
+        sleep 30
+        
+        echo "✅ Сервер снова доступен!"
+        echo "say Сервер успешно перезапущен!" > server/stdin
     
-    - name: Save server files to repository
+    - name: Save server files
       if: always()
       run: |
-        echo "Сохраняем файлы сервера в репозиторий..."
-        
-        # Создаем папку для бэкапа, если её нет
+        echo "Сохраняем файлы сервера..."
         mkdir -p server_backup
-        
-        # Копируем важные файлы
         cp -r server/world server_backup/ 2>/dev/null || echo "Папка world не найдена"
-        cp -r server/world_nether server_backup/ 2>/dev/null || echo "Папка world_nether не найдена"
-        cp -r server/world_the_end server_backup/ 2>/dev/null || echo "Папка world_the_end не найдена"
         cp server/server.properties server_backup/ 2>/dev/null || echo "server.properties не найден"
-        cp server/banned-ips.json server_backup/ 2>/dev/null || echo "banned-ips.json не найден"
-        cp server/banned-players.json server_backup/ 2>/dev/null || echo "banned-players.json не найден"
-        cp server/ops.json server_backup/ 2>/dev/null || echo "ops.json не найден"
-        cp server/whitelist.json server_backup/ 2>/dev/null || echo "whitelist.json не найден"
-        cp server/usercache.json server_backup/ 2>/dev/null || echo "usercache.json не найден"
-        
-        # Создаем архив с миром
-        if [ -d "server/world" ]; then
-          echo "Создаем архив мира..."
-          tar -czf server_backup/world_backup_$(date +%Y%m%d_%H%M%S).tar.gz -C server world world_nether world_the_end 2>/dev/null || echo "Не удалось создать архив"
-        fi
-        
-        echo "✅ Файлы сервера сохранены в server_backup/"
-        ls -la server_backup/
+        cp server/server.log server_backup/ 2>/dev/null || echo "server.log не найден"
+        echo "✅ Файлы сохранены."
     
-    - name: Commit server files to repository
+    - name: Commit server files
       if: always()
       run: |
-        echo "Коммитим изменения в репозиторий..."
-        
-        # Настраиваем Git
         git config user.name "GitHub Actions Bot"
         git config user.email "actions@github.com"
-        
-        # Добавляем файлы
         git add server/ server_backup/ || echo "Нет файлов для добавления"
-        
-        # Проверяем, есть ли изменения
-        if git diff --staged --quiet; then
-          echo "ℹ️ Нет изменений для коммита"
-        else
-          echo "✅ Изменения найдены, создаем коммит..."
+        if ! git diff --staged --quiet; then
           git commit -m "🔄 Автоматическое обновление файлов сервера [skip ci]"
           git push
-          echo "✅ Изменения успешно запушены в репозиторий!"
+          echo "✅ Изменения запушены!"
+        else
+          echo "ℹ️ Нет изменений для коммита."
         fi
-    
-    - name: Upload server files as artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: minecraft-server-files
-        path: |
-          server/
-          server_backup/
-        retention-days: 7
     
     - name: Keep server running
       run: |
         echo ""
-        echo "🟢 Сервер работает и доступен по адресу SilentSMP.serveo.net:25565"
-        echo "📂 Все файлы сервера в папке server/"
+        echo "🟢 Сервер работает и доступен через ProximaTunnel!"
+        echo "📍 Имя сервера: SilentSMP (указано в motd)"
+        echo "🌐 Подключайтесь через proximamp.com или ProximaClient"
+        echo "⏱️ Автоматическая перезагрузка через 5 часов 50 минут"
         echo "📝 Логи сервера:"
         echo "=================================================="
-        # Показываем логи из server.log
         tail -f server/server.log
