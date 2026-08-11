@@ -36,9 +36,11 @@ jobs:
           echo "server_exists=false" >> $GITHUB_OUTPUT
         fi
     
-    - name: Create server directory
+    - name: Create server directories
       if: steps.check_server.outputs.server_exists == 'false'
-      run: mkdir -p server/plugins
+      run: |
+        mkdir -p server/plugins
+        echo "✅ Папки server/plugins созданы"
     
     - name: Download Paper 1.19.2
       if: steps.check_server.outputs.server_exists == 'false'
@@ -46,25 +48,34 @@ jobs:
         echo "Скачиваем Paper 1.19.2..."
         wget -O server/paper.jar https://fill-data.papermc.io/v1/objects/2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864/paper-1.19.2-307.jar
         if [ ! -f server/paper.jar ] || [ ! -s server/paper.jar ]; then
-          echo "❌ Ошибка скачивания!"
+          echo "❌ Ошибка скачивания Paper!"
           exit 1
         fi
-        echo "✅ Файл скачан."
+        echo "✅ Paper скачан."
     
     - name: Download ProximaTunnel
       if: steps.check_server.outputs.server_exists == 'false'
       run: |
         echo "Скачиваем ProximaTunnel плагин..."
-        wget -O server/plugins/ProximaTunnel.jar https://modrinth.com/plugin/proximatunnel/versions/latest/download
         
-        # Проверяем, что скачался файл
-        if [ ! -f server/plugins/ProximaTunnel.jar ] || [ ! -s server/plugins/ProximaTunnel.jar ]; then
-          echo "⚠️ Не удалось скачать ProximaTunnel, пробуем через прямую ссылку..."
-          # Альтернативная ссылка (нужно будет заменить на актуальную)
+        # Пробуем скачать через API Modrinth
+        VERSION_INFO=$(curl -s "https://api.modrinth.com/v2/project/ProximaTunnel/version")
+        DOWNLOAD_URL=$(echo $VERSION_INFO | grep -o '"url":"[^"]*\.jar"' | head -1 | cut -d'"' -f4)
+        
+        if [ -n "$DOWNLOAD_URL" ]; then
+          echo "Скачиваем с: $DOWNLOAD_URL"
+          wget -O server/plugins/ProximaTunnel.jar $DOWNLOAD_URL
+        else
+          # Запасной вариант
           wget -O server/plugins/ProximaTunnel.jar https://cdn.modrinth.com/data/FzN6w5Cv/versions/1.0.0/ProximaTunnel-1.0.0.jar
         fi
         
-        echo "✅ ProximaTunnel установлен!"
+        if [ -f server/plugins/ProximaTunnel.jar ] && [ -s server/plugins/ProximaTunnel.jar ]; then
+          echo "✅ ProximaTunnel установлен!"
+          ls -lh server/plugins/ProximaTunnel.jar
+        else
+          echo "⚠️ ProximaTunnel не скачался. Продолжаем без туннеля."
+        fi
     
     - name: Create server.properties
       if: steps.check_server.outputs.server_exists == 'false'
@@ -101,35 +112,32 @@ jobs:
         spawn-protection=16
         white-list=false
         EOF
-        echo "✅ server.properties создан. motd=SilentSMP (имя сервера для ProximaTunnel)"
+        echo "✅ server.properties создан. motd=SilentSMP"
     
     - name: Create eula.txt
       if: steps.check_server.outputs.server_exists == 'false'
       run: |
         echo "eula=true" > server/eula.txt
-        echo "✅ eula.txt создан."
+        echo "✅ eula.txt создан"
     
     - name: Create restart script
       run: |
         cat > server/restart.sh << 'EOF'
         #!/bin/bash
         echo "🔄 Сервер перезапускается..."
-        # Ожидаем полной остановки сервера
         sleep 5
-        # Запускаем новую сессию с сервером
-        cd /home/runner/work/$(basename $(pwd))/$(basename $(pwd))/server
+        cd server
         nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui >> server.log 2>&1 &
+        echo $! > server.pid
         echo "✅ Сервер перезапущен!"
         EOF
         chmod +x server/restart.sh
-        echo "✅ restart.sh создан."
+        echo "✅ restart.sh создан"
     
     - name: Start Minecraft server
       run: |
         echo "Запускаем Minecraft сервер..."
         cd server
-        
-        # Запускаем сервер в фоне
         nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui >> server.log 2>&1 &
         SERVER_PID=$!
         echo $SERVER_PID > server.pid
@@ -148,54 +156,35 @@ jobs:
             exit 1
           fi
         done
-        
         cd ..
     
-    - name: Schedule server restart
+    - name: Schedule restart
       run: |
-        echo "⏱️ Запускаем таймер перезагрузки (через 5 часов 50 минут)..."
-        
-        # Создаем скрипт для отправки сообщений
-        cat > server/send_message.sh << 'EOF'
-        #!/bin/bash
-        MESSAGE="$1"
-        echo "say $MESSAGE" > server/stdin
-        EOF
-        chmod +x server/send_message.sh
-        
-        # Ожидаем 5 часов 50 минут (21000 секунд)
+        echo "⏱️ Таймер перезагрузки (через 5ч 50м)..."
         sleep 21000
         
-        echo "⚠️ Сервер будет перезагружен через 5 минут!"
-        echo "say Сервер будет перезагружен через 5 минут!" > server/stdin
-        sleep 240  # 4 минуты
+        echo "⚠️ Сервер перезагрузится через 5 минут!"
+        echo "say Сервер перезагрузится через 5 минут!" > server/stdin
+        sleep 240
         
-        echo "⚠️ Сервер будет перезагружен через 1 минуту!"
-        echo "say Сервер будет перезагружен через 1 минуту!" > server/stdin
-        sleep 50   # 50 секунд
+        echo "⚠️ Сервер перезагрузится через 1 минуту!"
+        echo "say Сервер перезагрузится через 1 минуту!" > server/stdin
+        sleep 50
         
-        echo "⚠️ Сервер будет перезагружен через 10 секунд!"
-        echo "say Сервер будет перезагружен через 10 секунд!" > server/stdin
-        sleep 10   # 10 секунд
+        echo "⚠️ Сервер перезагрузится через 10 секунд!"
+        echo "say Сервер перезагрузится через 10 секунд!" > server/stdin
+        sleep 10
         
-        echo "💾 Сохраняем мир и выключаем сервер..."
+        echo "💾 Сохраняем мир..."
         echo "save-all" > server/stdin
         sleep 3
         echo "stop" > server/stdin
-        
-        # Ожидаем остановки сервера
         sleep 10
         
-        echo "🔄 Запускаем скрипт перезапуска..."
         cd server
         ./restart.sh
         cd ..
-        
-        echo "✅ Сервер перезапущен! Ожидаем загрузки..."
-        sleep 30
-        
-        echo "✅ Сервер снова доступен!"
-        echo "say Сервер успешно перезапущен!" > server/stdin
+        echo "✅ Сервер перезапущен!"
     
     - name: Save server files
       if: always()
@@ -205,29 +194,27 @@ jobs:
         cp -r server/world server_backup/ 2>/dev/null || echo "Папка world не найдена"
         cp server/server.properties server_backup/ 2>/dev/null || echo "server.properties не найден"
         cp server/server.log server_backup/ 2>/dev/null || echo "server.log не найден"
-        echo "✅ Файлы сохранены."
+        echo "✅ Файлы сохранены в server_backup/"
     
-    - name: Commit server files
+    - name: Commit and push
       if: always()
       run: |
         git config user.name "GitHub Actions Bot"
         git config user.email "actions@github.com"
         git add server/ server_backup/ || echo "Нет файлов для добавления"
         if ! git diff --staged --quiet; then
-          git commit -m "🔄 Автоматическое обновление файлов сервера [skip ci]"
+          git commit -m "🔄 Обновление файлов сервера [skip ci]"
           git push
           echo "✅ Изменения запушены!"
         else
           echo "ℹ️ Нет изменений для коммита."
         fi
     
-    - name: Keep server running
+    - name: Keep alive
       run: |
         echo ""
-        echo "🟢 Сервер работает и доступен через ProximaTunnel!"
-        echo "📍 Имя сервера: SilentSMP (указано в motd)"
-        echo "🌐 Подключайтесь через proximamp.com или ProximaClient"
-        echo "⏱️ Автоматическая перезагрузка через 5 часов 50 минут"
-        echo "📝 Логи сервера:"
-        echo "=================================================="
+        echo "🟢 СЕРВЕР ЗАПУЩЕН!"
+        echo "📍 Имя: SilentSMP (через ProximaTunnel)"
+        echo "⏱️ Перезагрузка через 5ч 50м"
+        echo "📝 Логи:"
         tail -f server/server.log
