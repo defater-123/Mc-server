@@ -132,38 +132,12 @@ jobs:
         echo "🔄 Сервер перезапускается..."
         sleep 5
         cd server
-        # 🔥 ВАЖНО: Используем 12 ГБ RAM с оптимизированными GC флагами
         nohup java -Xmx12G -Xms6G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper.jar nogui >> server.log 2>&1 &
         echo $! > server.pid
         echo "✅ Сервер перезапущен с 12 ГБ RAM!"
         EOF
         chmod +x server/restart.sh
         echo "✅ restart.sh создан"
-    
-    - name: Start Minecraft server
-      run: |
-        echo "Запускаем Minecraft сервер..."
-        cd server
-        # 🔥 ВАЖНО: Используем 12 ГБ RAM с оптимизированными GC флагами
-        nohup java -Xmx12G -Xms6G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper.jar nogui >> server.log 2>&1 &
-        SERVER_PID=$!
-        echo $SERVER_PID > server.pid
-        echo "PID сервера: $SERVER_PID"
-        
-        echo "Ожидаем загрузки сервера..."
-        for i in {1..12}; do
-          sleep 5
-          if grep -q "Done" server.log 2>/dev/null; then
-            echo "✅ Сервер успешно запущен с 12 ГБ RAM!"
-            break
-          fi
-          if [ $i -eq 12 ]; then
-            echo "❌ Сервер не запустился. Логи:"
-            cat server.log
-            exit 1
-          fi
-        done
-        cd ..
     
     - name: Create Telegram bot script
       run: |
@@ -178,17 +152,20 @@ jobs:
         import psutil
         from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
         from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
-        
+
         BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         SERVER_PATH = "./server"
         PLUGINS_PATH = os.path.join(SERVER_PATH, "plugins")
-        
+
+        # Хранилище состояний пользователей
+        user_states = {}
+
         logging.basicConfig(
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             level=logging.INFO
         )
         logger = logging.getLogger(__name__)
-        
+
         def get_server_pid():
             try:
                 pid_file = os.path.join(SERVER_PATH, "server.pid")
@@ -200,7 +177,7 @@ jobs:
                 return None
             except Exception:
                 return None
-        
+
         def get_server_status():
             try:
                 pid = get_server_pid()
@@ -221,7 +198,7 @@ jobs:
             except Exception as e:
                 logger.error(f"Ошибка получения статуса: {e}")
                 return {'running': False, 'error': str(e)}
-        
+
         def get_online_players():
             try:
                 stdin_file = os.path.join(SERVER_PATH, "stdin")
@@ -251,7 +228,7 @@ jobs:
             except Exception as e:
                 logger.error(f"Ошибка получения списка игроков: {e}")
                 return {'count': 0, 'max': 20, 'names': []}
-        
+
         def get_system_stats():
             try:
                 cpu_total = psutil.cpu_percent(interval=0.5)
@@ -269,7 +246,7 @@ jobs:
             except Exception as e:
                 logger.error(f"Ошибка получения системной статистики: {e}")
                 return None
-        
+
         def get_plugins_list():
             if not os.path.exists(PLUGINS_PATH):
                 return []
@@ -278,7 +255,7 @@ jobs:
                 if file.endswith('.jar'):
                     plugins.append(file)
             return sorted(plugins)
-        
+
         def install_plugin_file(file_path, file_name):
             try:
                 plugin_path = os.path.join(PLUGINS_PATH, file_name)
@@ -286,7 +263,7 @@ jobs:
                 return True, f"✅ Плагин {file_name} установлен!"
             except Exception as e:
                 return False, f"❌ Ошибка: {str(e)}"
-        
+
         def delete_plugin(plugin_name):
             try:
                 plugin_path = os.path.join(PLUGINS_PATH, plugin_name)
@@ -296,7 +273,7 @@ jobs:
                 return False, f"❌ Плагин {plugin_name} не найден"
             except Exception as e:
                 return False, f"❌ Ошибка: {str(e)}"
-        
+
         def send_command_to_server(command):
             try:
                 stdin_file = os.path.join(SERVER_PATH, "stdin")
@@ -305,7 +282,7 @@ jobs:
                 return True, f"✅ Команда '{command}' отправлена"
             except Exception as e:
                 return False, f"❌ Ошибка: {str(e)}"
-        
+
         def restart_server():
             try:
                 send_command_to_server("stop")
@@ -319,14 +296,14 @@ jobs:
                 return True, "✅ Сервер перезапущен с 12 ГБ RAM!"
             except Exception as e:
                 return False, f"❌ Ошибка перезапуска: {str(e)}"
-        
+
         def stop_server():
             try:
                 send_command_to_server("stop")
                 return True, "✅ Команда остановки отправлена"
             except Exception as e:
                 return False, f"❌ Ошибка: {str(e)}"
-        
+
         def get_progress_bar(value, max_value, length=20):
             filled = int((value / max_value) * length)
             empty = length - filled
@@ -336,20 +313,22 @@ jobs:
                 return "🟩" * length
             else:
                 return "🟩" * filled + "⬜" * empty
-        
+
         async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "🤖 Привет! Я бот для управления Minecraft сервером.\n\n"
                 "Доступные команды:\n"
                 "/status - статус сервера (игроки, CPU, RAM)\n"
                 "/plugin list - список плагинов\n"
+                "/plugin add - интерактивная установка плагина\n"
                 "/plugin delete <имя> - удалить плагин\n"
                 "/restart - перезапустить сервер\n"
                 "/stop - остановить сервер\n"
+                "/cancel - отменить действие\n"
                 "/help - помощь\n\n"
-                "📤 Чтобы установить плагин - просто отправьте мне .jar файл"
+                "📤 Или просто отправьте .jar файл для установки"
             )
-        
+
         async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "📚 Помощь:\n\n"
@@ -358,12 +337,14 @@ jobs:
                 "   • Использование CPU\n"
                 "   • Использование памяти (RAM)\n"
                 "/plugin list - список плагинов\n"
+                "/plugin add - бот попросит отправить .jar файл\n"
                 "/plugin delete <имя_файла> - удалить плагин\n"
                 "/restart - перезапустить сервер\n"
-                "/stop - остановить сервер\n\n"
+                "/stop - остановить сервер\n"
+                "/cancel - отменить текущее действие\n\n"
                 "📤 Для установки плагина просто отправьте .jar файл"
             )
-        
+
         async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             server_info = get_server_status()
             
@@ -390,7 +371,7 @@ jobs:
             
             if server_info['memory_mb'] is not None:
                 memory_mb = server_info['memory_mb']
-                memory_usage = (memory_mb / 12288) * 100  # 12 ГБ выделено
+                memory_usage = (memory_mb / 12288) * 100
                 mem_bar = get_progress_bar(memory_usage, 100)
                 message += f"💾 **RAM сервера:** {memory_mb:.0f} MB из 12288 MB ({memory_usage:.1f}%)\n"
                 message += f"   {mem_bar}\n\n"
@@ -415,17 +396,19 @@ jobs:
                     message += f" и еще {len(plugins) - 5}"
             
             await update.message.reply_text(message, parse_mode='Markdown')
-        
+
         async def plugin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not context.args:
                 await update.message.reply_text(
                     "❌ Использование:\n"
                     "/plugin list - список плагинов\n"
+                    "/plugin add - интерактивная установка плагина\n"
                     "/plugin delete <имя_файла> - удалить плагин"
                 )
                 return
             
             action = context.args[0].lower()
+            user_id = update.effective_user.id
             
             if action == "list":
                 plugins = get_plugins_list()
@@ -437,6 +420,14 @@ jobs:
                     await update.message.reply_text(message, parse_mode='Markdown')
                 else:
                     await update.message.reply_text("❌ Плагины не установлены")
+            
+            elif action == "add":
+                user_states[user_id] = "waiting_for_plugin"
+                await update.message.reply_text(
+                    "📤 Отправьте мне .jar файл плагина.\n\n"
+                    "Я установлю его в папку plugins сервера.\n"
+                    "Если передумали - отправьте /cancel"
+                )
             
             elif action == "delete":
                 if len(context.args) < 2:
@@ -459,13 +450,21 @@ jobs:
                     )
             
             else:
-                await update.message.reply_text(f"❌ Неизвестная команда. Используйте: /plugin list или delete")
-        
+                await update.message.reply_text(f"❌ Неизвестная команда. Используйте: /plugin list, add или delete")
+
+        async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            user_id = update.effective_user.id
+            if user_id in user_states:
+                del user_states[user_id]
+                await update.message.reply_text("✅ Действие отменено")
+            else:
+                await update.message.reply_text("ℹ️ Нет активных действий для отмены")
+
         async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🔄 Перезапускаем сервер с 12 ГБ RAM...")
             success, message = restart_server()
             await update.message.reply_text(message)
-        
+
         async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🛑 Останавливаем сервер...")
             server_info = get_server_status()
@@ -474,14 +473,22 @@ jobs:
                 return
             success, message = stop_server()
             await update.message.reply_text(message)
-        
+
         async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            user_id = update.effective_user.id
             document = update.message.document
+            
             if not document.file_name.endswith('.jar'):
                 await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате .jar")
                 return
             
-            await update.message.reply_text(f"📥 Скачиваю {document.file_name}...")
+            # Проверяем, ожидает ли пользователь файл
+            if user_id in user_states and user_states[user_id] == "waiting_for_plugin":
+                del user_states[user_id]
+                await update.message.reply_text(f"📥 Устанавливаю {document.file_name}...")
+            else:
+                await update.message.reply_text(f"📥 Получен файл {document.file_name}. Устанавливаю...")
+            
             file = await context.bot.get_file(document.file_id)
             file_path = f"/tmp/{document.file_name}"
             await file.download_to_drive(file_path)
@@ -501,22 +508,22 @@ jobs:
                 )
             
             os.remove(file_path)
-        
+
         async def restart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query
             await query.answer()
             await query.edit_message_text("🔄 Перезагрузка сервера с 12 ГБ RAM...")
             success, message = restart_server()
             await query.edit_message_text(message)
-        
+
         async def dismiss_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query
             await query.answer()
             await query.edit_message_text("✅ Отменено")
-        
+
         async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
-        
+
         def main():
             if not BOT_TOKEN:
                 print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не установлен!")
@@ -526,6 +533,7 @@ jobs:
             application.add_handler(CommandHandler("help", help_command))
             application.add_handler(CommandHandler("status", status))
             application.add_handler(CommandHandler("plugin", plugin_command))
+            application.add_handler(CommandHandler("cancel", cancel_command))
             application.add_handler(CommandHandler("restart", restart_command))
             application.add_handler(CommandHandler("stop", stop_command))
             application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
@@ -534,11 +542,35 @@ jobs:
             application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
             print("🤖 Бот запущен!")
             application.run_polling(allowed_updates=Update.ALL_TYPES)
-        
+
         if __name__ == "__main__":
             main()
         BOTEOF
         echo "✅ bot.py создан"
+    
+    - name: Start Minecraft server
+      run: |
+        echo "Запускаем Minecraft сервер..."
+        cd server
+        nohup java -Xmx12G -Xms6G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper.jar nogui >> server.log 2>&1 &
+        SERVER_PID=$!
+        echo $SERVER_PID > server.pid
+        echo "PID сервера: $SERVER_PID"
+        
+        echo "Ожидаем загрузки сервера..."
+        for i in {1..12}; do
+          sleep 5
+          if grep -q "Done" server.log 2>/dev/null; then
+            echo "✅ Сервер успешно запущен с 12 ГБ RAM!"
+            break
+          fi
+          if [ $i -eq 12 ]; then
+            echo "❌ Сервер не запустился. Логи:"
+            cat server.log
+            exit 1
+          fi
+        done
+        cd ..
     
     - name: Start Telegram Bot
       run: |
