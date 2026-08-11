@@ -66,8 +66,6 @@ jobs:
       if: steps.check_server.outputs.server_exists == 'false'
       run: |
         echo "Скачиваем ProximaTunnel плагин..."
-        
-        # Пробуем скачать через API Modrinth
         VERSION_INFO=$(curl -s "https://api.modrinth.com/v2/project/ProximaTunnel/version")
         DOWNLOAD_URL=$(echo $VERSION_INFO | grep -o '"url":"[^"]*\.jar"' | head -1 | cut -d'"' -f4)
         
@@ -75,15 +73,13 @@ jobs:
           echo "Скачиваем с: $DOWNLOAD_URL"
           wget -O server/plugins/ProximaTunnel.jar $DOWNLOAD_URL
         else
-          # Запасной вариант
           wget -O server/plugins/ProximaTunnel.jar https://cdn.modrinth.com/data/FzN6w5Cv/versions/1.0.0/ProximaTunnel-1.0.0.jar
         fi
         
         if [ -f server/plugins/ProximaTunnel.jar ] && [ -s server/plugins/ProximaTunnel.jar ]; then
           echo "✅ ProximaTunnel установлен!"
-          ls -lh server/plugins/ProximaTunnel.jar
         else
-          echo "⚠️ ProximaTunnel не скачался. Продолжаем без туннеля."
+          echo "⚠️ ProximaTunnel не скачался."
         fi
     
     - name: Create server.properties
@@ -136,12 +132,38 @@ jobs:
         echo "🔄 Сервер перезапускается..."
         sleep 5
         cd server
-        nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui >> server.log 2>&1 &
+        # 🔥 ВАЖНО: Используем 12 ГБ RAM с оптимизированными GC флагами
+        nohup java -Xmx12G -Xms6G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper.jar nogui >> server.log 2>&1 &
         echo $! > server.pid
-        echo "✅ Сервер перезапущен!"
+        echo "✅ Сервер перезапущен с 12 ГБ RAM!"
         EOF
         chmod +x server/restart.sh
         echo "✅ restart.sh создан"
+    
+    - name: Start Minecraft server
+      run: |
+        echo "Запускаем Minecraft сервер..."
+        cd server
+        # 🔥 ВАЖНО: Используем 12 ГБ RAM с оптимизированными GC флагами
+        nohup java -Xmx12G -Xms6G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper.jar nogui >> server.log 2>&1 &
+        SERVER_PID=$!
+        echo $SERVER_PID > server.pid
+        echo "PID сервера: $SERVER_PID"
+        
+        echo "Ожидаем загрузки сервера..."
+        for i in {1..12}; do
+          sleep 5
+          if grep -q "Done" server.log 2>/dev/null; then
+            echo "✅ Сервер успешно запущен с 12 ГБ RAM!"
+            break
+          fi
+          if [ $i -eq 12 ]; then
+            echo "❌ Сервер не запустился. Логи:"
+            cat server.log
+            exit 1
+          fi
+        done
+        cd ..
     
     - name: Create Telegram bot script
       run: |
@@ -210,7 +232,7 @@ jobs:
                 if os.path.exists(log_file):
                     with open(log_file, 'r') as f:
                         lines = f.readlines()
-                        for line in reversed(lines[-20:]):
+                        for line in reversed(lines[-30:]):
                             if "There are" in line and "players online" in line:
                                 match = re.search(r"There are (\d+) of (\d+) players online", line)
                                 if match:
@@ -290,11 +312,11 @@ jobs:
                 time.sleep(5)
                 os.chdir(SERVER_PATH)
                 subprocess.Popen(
-                    ["nohup", "java", "-Xmx1024M", "-Xms1024M", "-jar", "paper.jar", "nogui"],
+                    ["nohup", "java", "-Xmx12G", "-Xms6G", "-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", "-XX:MaxGCPauseMillis=200", "-XX:+UnlockExperimentalVMOptions", "-XX:+DisableExplicitGC", "-XX:+AlwaysPreTouch", "-XX:G1NewSizePercent=30", "-XX:G1MaxNewSizePercent=40", "-XX:G1HeapRegionSize=8M", "-XX:G1ReservePercent=20", "-XX:G1HeapWastePercent=5", "-XX:G1MixedGCCountTarget=4", "-XX:InitiatingHeapOccupancyPercent=15", "-XX:G1MixedGCLiveThresholdPercent=90", "-XX:G1RSetUpdatingPauseTimePercent=5", "-XX:SurvivorRatio=32", "-XX:+PerfDisableSharedMem", "-XX:MaxTenuringThreshold=1", "-Dusing.aikars.flags=https://mcflags.emc.gs", "-Daikars.new.flags=true", "-jar", "paper.jar", "nogui"],
                     stdout=open("server.log", "a"),
                     stderr=subprocess.STDOUT
                 )
-                return True, "✅ Сервер перезапущен!"
+                return True, "✅ Сервер перезапущен с 12 ГБ RAM!"
             except Exception as e:
                 return False, f"❌ Ошибка перезапуска: {str(e)}"
         
@@ -368,9 +390,9 @@ jobs:
             
             if server_info['memory_mb'] is not None:
                 memory_mb = server_info['memory_mb']
-                memory_usage = (memory_mb / 1024) * 100
+                memory_usage = (memory_mb / 12288) * 100  # 12 ГБ выделено
                 mem_bar = get_progress_bar(memory_usage, 100)
-                message += f"💾 **RAM сервера:** {memory_mb:.0f} MB ({memory_usage:.1f}%)\n"
+                message += f"💾 **RAM сервера:** {memory_mb:.0f} MB из 12288 MB ({memory_usage:.1f}%)\n"
                 message += f"   {mem_bar}\n\n"
             
             if system_stats:
@@ -440,7 +462,7 @@ jobs:
                 await update.message.reply_text(f"❌ Неизвестная команда. Используйте: /plugin list или delete")
         
         async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            await update.message.reply_text("🔄 Перезапускаем сервер...")
+            await update.message.reply_text("🔄 Перезапускаем сервер с 12 ГБ RAM...")
             success, message = restart_server()
             await update.message.reply_text(message)
         
@@ -483,7 +505,7 @@ jobs:
         async def restart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query
             await query.answer()
-            await query.edit_message_text("🔄 Перезагрузка сервера...")
+            await query.edit_message_text("🔄 Перезагрузка сервера с 12 ГБ RAM...")
             success, message = restart_server()
             await query.edit_message_text(message)
         
@@ -517,30 +539,6 @@ jobs:
             main()
         BOTEOF
         echo "✅ bot.py создан"
-    
-    - name: Start Minecraft server
-      run: |
-        echo "Запускаем Minecraft сервер..."
-        cd server
-        nohup java -Xmx1024M -Xms1024M -jar paper.jar nogui >> server.log 2>&1 &
-        SERVER_PID=$!
-        echo $SERVER_PID > server.pid
-        echo "PID сервера: $SERVER_PID"
-        
-        echo "Ожидаем загрузки сервера..."
-        for i in {1..12}; do
-          sleep 5
-          if grep -q "Done" server.log 2>/dev/null; then
-            echo "✅ Сервер успешно запущен!"
-            break
-          fi
-          if [ $i -eq 12 ]; then
-            echo "❌ Сервер не запустился. Логи:"
-            cat server.log
-            exit 1
-          fi
-        done
-        cd ..
     
     - name: Start Telegram Bot
       run: |
@@ -610,5 +608,6 @@ jobs:
         echo "📍 Имя: SilentSMP (через ProximaTunnel)"
         echo "⏱️ Перезагрузка через 5ч 50м"
         echo "🤖 Telegram бот запущен!"
+        echo "💾 Выделено 12 ГБ RAM (из 16 доступных)"
         echo "📝 Логи:"
         tail -f server/server.log
