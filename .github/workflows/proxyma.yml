@@ -1,0 +1,29 @@
+@echo off
+echo ==================================================
+echo   ProximaClient - Подключение к SilentSMP
+echo ==================================================
+echo.
+
+:: Проверяем, установлен ли ProximaClient
+if not exist "%USERPROFILE%\AppData\Roaming\ProximaClient\ProximaClient.exe" (
+    echo ❌ ProximaClient не найден!
+    echo Скачайте его с: https://proximamp.com/client
+    pause
+    exit /b 1
+)
+
+echo ✅ ProximaClient найден!
+echo.
+
+:: Запускаем ProximaClient с параметрами для подключения
+echo Запускаем ProximaClient...
+start "" "%USERPROFILE%\AppData\Roaming\ProximaClient\ProximaClient.exe" --connect SilentSMP
+
+echo.
+echo ==================================================
+echo   Инструкция:
+echo   1. ProximaClient откроется автоматически
+echo   2. Нажмите "Подключиться к серверу SilentSMP"
+echo   3. Или используйте команду в клиенте: /connect SilentSMP
+echo ==================================================
+pause
