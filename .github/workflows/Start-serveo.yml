@@ -1,0 +1,504 @@
+name: Minecraft Paper Server (Serveo)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Java 17
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install bot dependencies
+      run: |
+        pip install python-telegram-bot requests psutil
+    
+    - name: Check if server exists
+      id: check_server
+      run: |
+        if [ -f "server/paper.jar" ] && [ -f "server/eula.txt" ] && [ -f "server/server.properties" ]; then
+          echo "✅ Найден существующий сервер!"
+          echo "server_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "ℹ️ Сервер не найден, будет создан новый."
+          echo "server_exists=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create server directories
+      if: steps.check_server.outputs.server_exists == 'false'
+      run: |
+        mkdir -p server/plugins
+        echo "✅ Папки server/plugins созданы"
+    
+    - name: Download Paper 1.19.2
+      if: steps.check_server.outputs.server_exists == 'false'
+      run: |
+        echo "Скачиваем Paper 1.19.2..."
+        wget -O server/paper.jar https://fill-data.papermc.io/v1/objects/2eb5c7459ec94bcdc597ed711d549a3ab4b0fda13e412a0792a1a069b5903864/paper-1.19.2-307.jar
+        if [ ! -f server/paper.jar ] || [ ! -s server/paper.jar ]; then
+          echo "❌ Ошибка скачивания Paper!"
+          exit 1
+        fi
+        echo "✅ Paper скачан."
+    
+    - name: Create server.properties
+      if: steps.check_server.outputs.server_exists == 'false'
+      run: |
+        cat > server/server.properties << 'EOF'
+        enable-jmx-monitoring=false
+        rcon.port=25575
+        gamemode=survival
+        enable-command-block=false
+        enable-query=false
+        enforce-secure-profile=true
+        level-name=world
+        motd=SilentSMP
+        query.port=25565
+        pvp=true
+        generate-structures=true
+        difficulty=easy
+        network-compression-threshold=256
+        max-tick-time=60000
+        require-resource-pack=false
+        use-native-transport=true
+        max-players=20
+        online-mode=false
+        enable-status=true
+        allow-flight=false
+        view-distance=10
+        server-ip=0.0.0.0
+        allow-nether=true
+        server-port=25565
+        sync-chunk-writes=true
+        enable-rcon=false
+        op-permission-level=4
+        spawn-protection=16
+        white-list=false
+        EOF
+        echo "✅ server.properties создан. motd=SilentSMP"
+    
+    - name: Create eula.txt
+      if: steps.check_server.outputs.server_exists == 'false'
+      run: |
+        echo "eula=true" > server/eula.txt
+        echo "✅ eula.txt создан"
+    
+    - name: Create restart script
+      run: |
+        cat > server/restart.sh << 'EOF'
+        #!/bin/bash
+        echo "🔄 Сервер перезапускается..."
+        sleep 5
+        cd server
+        nohup java -Xmx4G -Xms2G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar paper.jar nogui >> server.log 2>&1 &
+        echo $! > server.pid
+        echo "✅ Сервер перезапущен!"
+        EOF
+        chmod +x server/restart.sh
+        echo "✅ restart.sh создан"
+    
+    - name: Create Telegram bot script
+      run: |
+        cat > bot.py << 'BOTEOF'
+        #!/usr/bin/env python3
+        import os, subprocess, logging, shutil, time, re, psutil
+        from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+        from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+
+        BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        SERVER_PATH = "./server"
+        PLUGINS_PATH = os.path.join(SERVER_PATH, "plugins")
+        user_states = {}
+
+        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+        logger = logging.getLogger(__name__)
+
+        def get_server_pid():
+            try:
+                pid_file = os.path.join(SERVER_PATH, "server.pid")
+                if os.path.exists(pid_file):
+                    with open(pid_file, 'r') as f:
+                        pid = f.read().strip()
+                        if pid.isdigit():
+                            return int(pid)
+                return None
+            except Exception:
+                return None
+
+        def get_server_status():
+            try:
+                pid = get_server_pid()
+                if pid and psutil.pid_exists(pid):
+                    process = psutil.Process(pid)
+                    cpu_percent = process.cpu_percent(interval=0.5)
+                    memory_info = process.memory_info()
+                    memory_mb = memory_info.rss / 1024 / 1024
+                    players = get_online_players()
+                    return {'running': True, 'pid': pid, 'cpu': cpu_percent, 'memory_mb': memory_mb, 'players': players}
+                return {'running': False}
+            except Exception as e:
+                logger.error(f"Ошибка получения статуса: {e}")
+                return {'running': False, 'error': str(e)}
+
+        def get_online_players():
+            try:
+                stdin_file = os.path.join(SERVER_PATH, "stdin")
+                with open(stdin_file, 'w') as f:
+                    f.write("list\n")
+                time.sleep(0.5)
+                log_file = os.path.join(SERVER_PATH, "server.log")
+                if os.path.exists(log_file):
+                    with open(log_file, 'r') as f:
+                        lines = f.readlines()
+                        for line in reversed(lines[-30:]):
+                            if "There are" in line and "players online" in line:
+                                match = re.search(r"There are (\d+) of (\d+) players online", line)
+                                if match:
+                                    count = int(match.group(1))
+                                    max_count = int(match.group(2))
+                                    names_match = re.search(r"players online: (.*)$", line)
+                                    names = []
+                                    if names_match:
+                                        names = [n.strip() for n in names_match.group(1).split(",") if n.strip()]
+                                    return {'count': count, 'max': max_count, 'names': names}
+                return {'count': 0, 'max': 20, 'names': []}
+            except Exception as e:
+                logger.error(f"Ошибка получения списка игроков: {e}")
+                return {'count': 0, 'max': 20, 'names': []}
+
+        def get_system_stats():
+            try:
+                cpu_total = psutil.cpu_percent(interval=0.5)
+                memory = psutil.virtual_memory()
+                memory_total_mb = memory.total / 1024 / 1024
+                memory_used_mb = memory.used / 1024 / 1024
+                disk = psutil.disk_usage('/')
+                disk_free_gb = disk.free / 1024 / 1024 / 1024
+                return {'cpu_total': cpu_total, 'memory_total_mb': memory_total_mb, 'memory_used_mb': memory_used_mb, 'disk_free_gb': disk_free_gb}
+            except Exception as e:
+                logger.error(f"Ошибка получения системной статистики: {e}")
+                return None
+
+        def get_plugins_list():
+            if not os.path.exists(PLUGINS_PATH):
+                return []
+            plugins = []
+            for file in os.listdir(PLUGINS_PATH):
+                if file.endswith('.jar'):
+                    plugins.append(file)
+            return sorted(plugins)
+
+        def install_plugin_file(file_path, file_name):
+            try:
+                plugin_path = os.path.join(PLUGINS_PATH, file_name)
+                shutil.copy2(file_path, plugin_path)
+                return True, f"✅ Плагин {file_name} установлен!"
+            except Exception as e:
+                return False, f"❌ Ошибка: {str(e)}"
+
+        def delete_plugin(plugin_name):
+            try:
+                plugin_path = os.path.join(PLUGINS_PATH, plugin_name)
+                if os.path.exists(plugin_path):
+                    os.remove(plugin_path)
+                    return True, f"✅ Плагин {plugin_name} удален!"
+                return False, f"❌ Плагин {plugin_name} не найден"
+            except Exception as e:
+                return False, f"❌ Ошибка: {str(e)}"
+
+        def send_command_to_server(command):
+            try:
+                stdin_file = os.path.join(SERVER_PATH, "stdin")
+                with open(stdin_file, 'w') as f:
+                    f.write(command + "\n")
+                return True, f"✅ Команда '{command}' отправлена"
+            except Exception as e:
+                return False, f"❌ Ошибка: {str(e)}"
+
+        def restart_server():
+            try:
+                send_command_to_server("stop")
+                time.sleep(5)
+                os.chdir(SERVER_PATH)
+                subprocess.Popen(["nohup", "java", "-Xmx4G", "-Xms2G", "-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", "-XX:MaxGCPauseMillis=200", "-jar", "paper.jar", "nogui"], stdout=open("server.log", "a"), stderr=subprocess.STDOUT)
+                return True, "✅ Сервер перезапущен!"
+            except Exception as e:
+                return False, f"❌ Ошибка перезапуска: {str(e)}"
+
+        def stop_server():
+            try:
+                send_command_to_server("stop")
+                return True, "✅ Команда остановки отправлена"
+            except Exception as e:
+                return False, f"❌ Ошибка: {str(e)}"
+
+        def get_progress_bar(value, max_value, length=20):
+            filled = int((value / max_value) * length)
+            empty = length - filled
+            if filled == 0:
+                return "⬜" * length
+            elif filled == length:
+                return "🟩" * length
+            else:
+                return "🟩" * filled + "⬜" * empty
+
+        async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await update.message.reply_text("🤖 Привет! Я бот для управления Minecraft сервером.\n\nДоступные команды:\n/status - статус сервера\n/plugin list - список плагинов\n/plugin add - установить плагин\n/plugin delete <имя> - удалить плагин\n/restart - перезапустить сервер\n/stop - остановить сервер\n/cancel - отменить действие\n/help - помощь\n\n📤 Или просто отправьте .jar файл")
+
+        async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await update.message.reply_text("📚 Помощь:\n\n/status - статус сервера (игроки, CPU, RAM)\n/plugin list - список плагинов\n/plugin add - бот попросит отправить .jar файл\n/plugin delete <имя> - удалить плагин\n/restart - перезапустить сервер\n/stop - остановить сервер\n/cancel - отменить действие\n\n📤 Для установки плагина отправьте .jar файл")
+
+        async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            server_info = get_server_status()
+            if not server_info['running']:
+                await update.message.reply_text("❌ Сервер не запущен")
+                return
+            system_stats = get_system_stats()
+            message = "📊 **Статус сервера**\n" + "=" * 30 + "\n\n"
+            message += f"🟢 **Статус:** Запущен (PID: {server_info['pid']})\n\n"
+            players = server_info['players']
+            player_list = ", ".join(players['names']) if players['names'] else "нет игроков"
+            message += f"👥 **Игроки:** {players['count']}/{players['max']}\n   {player_list}\n\n"
+            if server_info['cpu'] is not None:
+                cpu_usage = server_info['cpu']
+                message += f"⚡ **CPU сервера:** {cpu_usage:.1f}%\n   {get_progress_bar(cpu_usage, 100)}\n\n"
+            if server_info['memory_mb'] is not None:
+                memory_mb = server_info['memory_mb']
+                memory_usage = (memory_mb / 4096) * 100
+                message += f"💾 **RAM сервера:** {memory_mb:.0f} MB из 4096 MB ({memory_usage:.1f}%)\n   {get_progress_bar(memory_usage, 100)}\n\n"
+            if system_stats:
+                message += "📈 **Общая загрузка системы:**\n"
+                message += f"   CPU: {system_stats['cpu_total']:.1f}%\n   {get_progress_bar(system_stats['cpu_total'], 100)}\n"
+                sys_mem_usage = (system_stats['memory_used_mb'] / system_stats['memory_total_mb']) * 100
+                message += f"   RAM: {system_stats['memory_used_mb']:.0f} MB из {system_stats['memory_total_mb']:.0f} MB ({sys_mem_usage:.1f}%)\n   {get_progress_bar(sys_mem_usage, 100)}\n"
+                message += f"   💾 Диск: свободно {system_stats['disk_free_gb']:.1f} GB\n"
+            plugins = get_plugins_list()
+            message += f"\n📂 **Плагины:** {len(plugins)} установлено"
+            if plugins:
+                message += "\n   " + ", ".join(plugins[:5])
+                if len(plugins) > 5:
+                    message += f" и еще {len(plugins) - 5}"
+            await update.message.reply_text(message, parse_mode='Markdown')
+
+        async def plugin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            if not context.args:
+                await update.message.reply_text("❌ Использование:\n/plugin list - список плагинов\n/plugin add - установить плагин\n/plugin delete <имя> - удалить плагин")
+                return
+            action = context.args[0].lower()
+            user_id = update.effective_user.id
+            if action == "list":
+                plugins = get_plugins_list()
+                if plugins:
+                    message = "📋 **Установленные плагины:**\n\n"
+                    for i, plugin in enumerate(plugins, 1):
+                        size = os.path.getsize(os.path.join(PLUGINS_PATH, plugin)) // 1024
+                        message += f"{i}. {plugin} ({size} KB)\n"
+                    await update.message.reply_text(message, parse_mode='Markdown')
+                else:
+                    await update.message.reply_text("❌ Плагины не установлены")
+            elif action == "add":
+                user_states[user_id] = "waiting_for_plugin"
+                await update.message.reply_text("📤 Отправьте мне .jar файл плагина.\n\nЕсли передумали - отправьте /cancel")
+            elif action == "delete":
+                if len(context.args) < 2:
+                    await update.message.reply_text("❌ Укажите имя файла. Пример: /plugin delete WorldEdit.jar")
+                    return
+                plugin_name = context.args[1]
+                success, message = delete_plugin(plugin_name)
+                await update.message.reply_text(message)
+                if success:
+                    keyboard = [[InlineKeyboardButton("🔄 Перезагрузить сервер", callback_data="restart_server"), InlineKeyboardButton("❌ Позже", callback_data="dismiss")]]
+                    await update.message.reply_text("Плагин удален! Нужно перезагрузить сервер.", reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                await update.message.reply_text("❌ Неизвестная команда. Используйте: /plugin list, add или delete")
+
+        async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            user_id = update.effective_user.id
+            if user_id in user_states:
+                del user_states[user_id]
+                await update.message.reply_text("✅ Действие отменено")
+            else:
+                await update.message.reply_text("ℹ️ Нет активных действий для отмены")
+
+        async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await update.message.reply_text("🔄 Перезапускаем сервер...")
+            success, message = restart_server()
+            await update.message.reply_text(message)
+
+        async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await update.message.reply_text("🛑 Останавливаем сервер...")
+            server_info = get_server_status()
+            if not server_info['running']:
+                await update.message.reply_text("ℹ️ Сервер уже остановлен")
+                return
+            success, message = stop_server()
+            await update.message.reply_text(message)
+
+        async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            user_id = update.effective_user.id
+            document = update.message.document
+            if not document.file_name.endswith('.jar'):
+                await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате .jar")
+                return
+            if user_id in user_states and user_states[user_id] == "waiting_for_plugin":
+                del user_states[user_id]
+            await update.message.reply_text(f"📥 Устанавливаю {document.file_name}...")
+            file = await context.bot.get_file(document.file_id)
+            file_path = f"/tmp/{document.file_name}"
+            await file.download_to_drive(file_path)
+            success, message = install_plugin_file(file_path, document.file_name)
+            await update.message.reply_text(message)
+            if success:
+                keyboard = [[InlineKeyboardButton("🔄 Перезагрузить сервер", callback_data="restart_server"), InlineKeyboardButton("❌ Позже", callback_data="dismiss")]]
+                await update.message.reply_text("Плагин установлен! Нужно перезагрузить сервер для активации.", reply_markup=InlineKeyboardMarkup(keyboard))
+            os.remove(file_path)
+
+        async def restart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            query = update.callback_query
+            await query.answer()
+            await query.edit_message_text("🔄 Перезагрузка сервера...")
+            success, message = restart_server()
+            await query.edit_message_text(message)
+
+        async def dismiss_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            query = update.callback_query
+            await query.answer()
+            await query.edit_message_text("✅ Отменено")
+
+        async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            pass
+
+        def main():
+            if not BOT_TOKEN:
+                print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не установлен!")
+                return
+            application = Application.builder().token(BOT_TOKEN).build()
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CommandHandler("help", help_command))
+            application.add_handler(CommandHandler("status", status))
+            application.add_handler(CommandHandler("plugin", plugin_command))
+            application.add_handler(CommandHandler("cancel", cancel_command))
+            application.add_handler(CommandHandler("restart", restart_command))
+            application.add_handler(CommandHandler("stop", stop_command))
+            application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+            application.add_handler(CallbackQueryHandler(restart_callback, pattern="restart_server"))
+            application.add_handler(CallbackQueryHandler(dismiss_callback, pattern="dismiss"))
+            application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+            print("🤖 Бот запущен!")
+            application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+        if __name__ == "__main__":
+            main()
+        BOTEOF
+        echo "✅ bot.py создан"
+    
+    - name: Start Minecraft server
+      run: |
+        echo "Запускаем Minecraft сервер..."
+        cd server
+        nohup java -Xmx4G -Xms2G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar paper.jar nogui >> server.log 2>&1 &
+        echo $! > server.pid
+        echo "PID сервера: $(cat server.pid)"
+        for i in {1..12}; do
+          sleep 5
+          if grep -q "Done" server.log 2>/dev/null; then
+            echo "✅ Сервер успешно запущен!"
+            break
+          fi
+          if [ $i -eq 12 ]; then
+            echo "❌ Сервер не запустился. Логи:"
+            cat server.log
+            exit 1
+          fi
+        done
+        cd ..
+    
+    - name: Setup Serveo tunnel
+      run: |
+        echo "Устанавливаем SSH клиент..."
+        sudo apt-get update
+        sudo apt-get install -y openssh-client
+        
+        echo "Создаем туннель через Serveo..."
+        ssh -o StrictHostKeyChecking=no -R SilentSMP.serveo.net:80:localhost:25565 serveo.net &
+        sleep 10
+        echo ""
+        echo "=================================================="
+        echo "✅ СЕРВЕР ДОСТУПЕН ПО АДРЕСУ: SilentSMP.serveo.net"
+        echo "🔌 Порт: 25565"
+        echo "=================================================="
+    
+    - name: Start Telegram Bot
+      run: |
+        echo "Запускаем Telegram бота..."
+        python3 bot.py &
+        sleep 5
+        echo "✅ Бот запущен!"
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    
+    - name: Schedule restart
+      run: |
+        echo "⏱️ Таймер перезагрузки (через 5ч 50м)..."
+        sleep 21000
+        echo "⚠️ Сервер перезагрузится через 5 минут!" && echo "say Сервер перезагрузится через 5 минут!" > server/stdin && sleep 240
+        echo "⚠️ Сервер перезагрузится через 1 минуту!" && echo "say Сервер перезагрузится через 1 минуту!" > server/stdin && sleep 50
+        echo "⚠️ Сервер перезагрузится через 10 секунд!" && echo "say Сервер перезагрузится через 10 секунд!" > server/stdin && sleep 10
+        echo "💾 Сохраняем мир..." && echo "save-all" > server/stdin && sleep 3
+        echo "stop" > server/stdin && sleep 10
+        cd server && ./restart.sh && cd ..
+        echo "✅ Сервер перезапущен!"
+    
+    - name: Save server files
+      if: always()
+      run: |
+        mkdir -p server_backup
+        cp -r server/world server_backup/ 2>/dev/null || echo "Папка world не найдена"
+        cp server/server.properties server_backup/ 2>/dev/null || echo "server.properties не найден"
+        cp server/server.log server_backup/ 2>/dev/null || echo "server.log не найден"
+        echo "✅ Файлы сохранены в server_backup/"
+    
+    - name: Commit and push
+      if: always()
+      run: |
+        git config user.name "GitHub Actions Bot"
+        git config user.email "actions@github.com"
+        git add server/ server_backup/ || echo "Нет файлов для добавления"
+        if ! git diff --staged --quiet; then
+          git commit -m "🔄 Обновление файлов сервера [skip ci]"
+          git push
+          echo "✅ Изменения запушены!"
+        else
+          echo "ℹ️ Нет изменений для коммита."
+        fi
+    
+    - name: Keep alive
+      run: |
+        echo ""
+        echo "🟢 СЕРВЕР ЗАПУЩЕН!"
+        echo "📍 Адрес: SilentSMP.serveo.net:25565"
+        echo "⏱️ Перезагрузка через 5ч 50м"
+        echo "🤖 Telegram бот запущен!"
+        echo "📝 Логи:"
+        tail -f server/server.log
