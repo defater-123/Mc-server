@@ -407,3 +407,88 @@ Loading libraries, please wait...
 [03:45:44 INFO]: [ProximaMP] [STDOUT] OPEN channel: [5]
 [03:45:44 WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
 [03:45:44 INFO]: [ProximaMP] [STDOUT] CLOSE channel: [5]
+Starting org.bukkit.craftbukkit.Main
+*** Warning, you've not updated in a while! ***
+*** Please download a new build as per instructions from https://papermc.io/downloads ***
+System Info: Java 17 (OpenJDK 64-Bit Server VM 17.0.19+10) Host: Linux 6.17.0-1020-azure (amd64)
+Loading libraries, please wait...
+2026-08-14 08:25:42,119 ServerMain WARN Advanced terminal features are not available in this environment
+[08:25:45 INFO]: Building unoptimized datafixer
+[08:25:46 INFO]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
+[08:25:48 INFO]: Loaded 7 recipes
+[08:25:49 INFO]: Starting minecraft server version 1.19.2
+[08:25:49 INFO]: Loading properties
+[08:25:49 INFO]: This server is running Paper version git-Paper-307 (MC: 1.19.2) (Implementing API version 1.19.2-R0.1-SNAPSHOT) (Git: 476ef25)
+[08:25:49 INFO]: Server Ping Player Sample Count: 12
+[08:25:49 INFO]: Using 4 threads for Netty based IO
+[08:25:49 INFO]: [ChunkTaskScheduler] Chunk system is using 1 I/O threads, 1 worker threads, and gen parallelism of 1 threads
+[08:25:49 INFO]: Default game type: SURVIVAL
+[08:25:49 INFO]: Generating keypair
+[08:25:50 INFO]: Starting Minecraft server on 0.0.0.0:25565
+[08:25:50 INFO]: Using epoll channel type
+[08:25:50 INFO]: Paper: Using libdeflate (Linux x86_64) compression from Velocity.
+[08:25:50 INFO]: Paper: Using OpenSSL 3.0.x (Linux x86_64) cipher from Velocity.
+[08:25:50 INFO]: [ProximaMP] Loading ProximaMP v1.1
+[08:25:50 INFO]: Server permissions file permissions.yml is empty, ignoring it
+[08:25:50 WARN]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!
+[08:25:50 WARN]: The server will make no attempt to authenticate usernames. Beware.
+[08:25:50 WARN]: While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.
+[08:25:50 WARN]: To change this, set "online-mode" to "true" in the server.properties file.
+[08:25:50 INFO]: Preparing level "world"
+[08:25:51 INFO]: Preparing start region for dimension minecraft:overworld
+[08:25:51 INFO]: Time elapsed: 239 ms
+[08:25:51 INFO]: Preparing start region for dimension minecraft:the_nether
+[08:25:51 INFO]: Time elapsed: 82 ms
+[08:25:51 INFO]: Preparing start region for dimension minecraft:the_end
+[08:25:51 INFO]: Time elapsed: 49 ms
+[08:25:51 INFO]: [ProximaMP] Enabling ProximaMP v1.1
+[08:25:51 INFO]: [ProximaMP] [STDOUT] [ProximaMP][Protocol] reflect -> null
+[08:25:51 WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
+[08:25:51 INFO]: Running delayed init tasks
+[08:25:51 INFO]: Done (2.444s)! For help, type "help"
+[08:25:51 INFO]: Timings Reset
+[08:25:52 INFO]: [ProximaMP] [STDOUT] Connection to ProximaMP server established!
+[08:29:04 INFO]: [ProximaMP] [STDOUT] OPEN channel: [1]
+[08:29:04 INFO]: UUID of player Defater123 is ce1d51a9-f101-370c-a8f8-6babf027a0a0
+[08:29:04 INFO]: Defater123 joined the game
+[08:29:04 INFO]: Defater123[/127.0.0.1:58820] logged in with entity id 197 at ([world]262.17511203935567, 103.0, 127.967747136755)
+[08:29:49 WARN]: Defater123 was kicked due to keepalive timeout!
+[08:29:49 INFO]: Defater123 lost connection: Timed out
+[08:29:49 INFO]: Defater123 left the game
+[08:29:49 INFO]: [ProximaMP] [STDOUT] CLOSE channel: [1]
+Starting org.bukkit.craftbukkit.Main
+*** Warning, you've not updated in a while! ***
+*** Please download a new build as per instructions from https://papermc.io/downloads ***
+System Info: Java 17 (OpenJDK 64-Bit Server VM 17.0.19+10) Host: Linux 6.17.0-1020-azure (amd64)
+Loading libraries, please wait...
+2026-08-14 08:29:57,097 ServerMain WARN Advanced terminal features are not available in this environment
+[08:29:59 INFO]: Building unoptimized datafixer
+[08:30:00 INFO]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
+[08:30:00 ERROR]: Failed to start the minecraft server
+net.minecraft.util.SessionLock$ExceptionWorldConflict: /home/runner/work/Mc-server/Mc-server/server/./world/session.lock: already locked (possibly by other Minecraft instance?)
+	at net.minecraft.util.DirectoryLock$LockException.alreadyLocked(DirectoryLock.java:136) ~[?:?]
+	at net.minecraft.util.DirectoryLock.create(DirectoryLock.java:33) ~[?:?]
+	at net.minecraft.world.level.storage.LevelStorageSource$LevelStorageAccess.<init>(LevelStorageSource.java:398) ~[?:?]
+	at net.minecraft.world.level.storage.LevelStorageSource.createAccess(LevelStorageSource.java:323) ~[?:?]
+	at net.minecraft.server.Main.main(Main.java:185) ~[paper-1.19.2.jar:git-Paper-307]
+	at org.bukkit.craftbukkit.Main.main(Main.java:302) ~[paper-1.19.2.jar:git-Paper-307]
+	at io.papermc.paperclip.Paperclip.lambda$main$0(Paperclip.java:42) ~[app:?]
+	at java.lang.Thread.run(Thread.java:840) ~[?:?]
+[08:31:48 INFO]: [ProximaMP] [STDOUT] OPEN channel: [2]
+[08:31:48 WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
+[08:31:48 INFO]: UUID of player Defater123 is ce1d51a9-f101-370c-a8f8-6babf027a0a0
+[08:31:48 INFO]: Defater123 joined the game
+[08:31:48 INFO]: Defater123[/127.0.0.1:33156] logged in with entity id 407 at ([world]265.4796374251686, 101.0, 114.72037214151658)
+[08:32:28 INFO]: [ProximaMP] [STDOUT] CLOSE channel: [2]
+[08:32:28 INFO]: [ProximaMP] [STDOUT] Local pump stopped for channel 2: Socket closed
+[08:32:28 INFO]: Defater123 lost connection: Disconnected
+[08:32:28 INFO]: Defater123 left the game
+[08:39:34 INFO]: [ProximaMP] [STDOUT] OPEN channel: [3]
+[08:39:34 WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
+[08:39:34 INFO]: UUID of player Defater123 is ce1d51a9-f101-370c-a8f8-6babf027a0a0
+[08:39:34 INFO]: Defater123 joined the game
+[08:39:34 INFO]: Defater123[/127.0.0.1:34498] logged in with entity id 502 at ([world]265.4796374251686, 101.0, 114.72037214151658)
+[08:39:59 INFO]: [ProximaMP] [STDOUT] CLOSE channel: [3]
+[08:39:59 INFO]: [ProximaMP] [STDOUT] Local pump stopped for channel 3: Socket closed
+[08:39:59 INFO]: Defater123 lost connection: Disconnected
+[08:39:59 INFO]: Defater123 left the game

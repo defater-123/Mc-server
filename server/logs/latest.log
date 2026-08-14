@@ -1,14 +1,12 @@
-[03:25:54] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] Connection to ProximaMP server established!
-[03:25:54] [Craft Scheduler Thread - 3 - ProximaMP/WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
-[03:36:05] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] OPEN channel: [1]
-[03:36:05] [Craft Scheduler Thread - 3 - ProximaMP/WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
-[03:36:05] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] CLOSE channel: [1]
-[03:36:38] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] OPEN channel: [2]
-[03:36:39] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] CLOSE channel: [2]
-[03:38:17] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] OPEN channel: [3]
-[03:38:17] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] CLOSE channel: [3]
-[03:38:34] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] OPEN channel: [4]
-[03:38:35] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] CLOSE channel: [4]
-[03:45:44] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] OPEN channel: [5]
-[03:45:44] [Craft Scheduler Thread - 3 - ProximaMP/WARN]: Nag author(s): '[]' of 'ProximaMP' about their usage of System.out/err.print. Please use your plugin's logger instead (JavaPlugin#getLogger).
-[03:45:44] [Craft Scheduler Thread - 3 - ProximaMP/INFO]: [ProximaMP] [STDOUT] CLOSE channel: [5]
+[08:29:59] [ServerMain/INFO]: Building unoptimized datafixer
+[08:30:00] [ServerMain/INFO]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
+[08:30:00] [ServerMain/ERROR]: Failed to start the minecraft server
+net.minecraft.util.SessionLock$ExceptionWorldConflict: /home/runner/work/Mc-server/Mc-server/server/./world/session.lock: already locked (possibly by other Minecraft instance?)
+	at net.minecraft.util.DirectoryLock$LockException.alreadyLocked(DirectoryLock.java:136) ~[?:?]
+	at net.minecraft.util.DirectoryLock.create(DirectoryLock.java:33) ~[?:?]
+	at net.minecraft.world.level.storage.LevelStorageSource$LevelStorageAccess.<init>(LevelStorageSource.java:398) ~[?:?]
+	at net.minecraft.world.level.storage.LevelStorageSource.createAccess(LevelStorageSource.java:323) ~[?:?]
+	at net.minecraft.server.Main.main(Main.java:185) ~[paper-1.19.2.jar:git-Paper-307]
+	at org.bukkit.craftbukkit.Main.main(Main.java:302) ~[paper-1.19.2.jar:git-Paper-307]
+	at io.papermc.paperclip.Paperclip.lambda$main$0(Paperclip.java:42) ~[app:?]
+	at java.lang.Thread.run(Thread.java:840) ~[?:?]
